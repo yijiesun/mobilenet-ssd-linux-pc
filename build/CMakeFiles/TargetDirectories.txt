@@ -1,6 +1,0 @@
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/edit_cache.dir
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/VIDEO_KNN.dir
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/VIDEO.dir
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/CAPTRUE.dir
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/rebuild_cache.dir
-/home/syj/work/Tengine/examples/mobilenet_ssd/build/CMakeFiles/IMG.dir
