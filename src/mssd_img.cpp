@@ -32,6 +32,7 @@
 #include "tengine_c_api.h"
 #include <sys/time.h>
 #include "common.hpp"
+#include "config.h"
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
@@ -177,6 +178,7 @@ int main(int argc, char* argv[])
     if(image_file.empty())
     {
         image_file = root_path + DEF_IMAGE;
+        
         std::cout << "image file not specified,using " << image_file << " by default\n";
     }
 
@@ -212,7 +214,8 @@ int main(int argc, char* argv[])
     }
 
     // dump_graph(graph);
-
+    get_param_mssd_img(image_file,save_name);
+    std::cout<<"input img: "<<image_file<<"\noutput img: "<<save_name<<std::endl;
     // input
     int img_h = 300;
     int img_w = 300;

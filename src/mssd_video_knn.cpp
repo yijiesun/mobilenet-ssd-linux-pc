@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include "common.hpp"
 #include "knn/knn.h"
+#include "config.h"
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
@@ -273,6 +274,8 @@ int main(int argc, char *argv[])
     VideoWriter outputVideo;
     std::string in_video_file =  root_path + DEF_VIDEO_IN;
     std::string out_video_file =  root_path + DEF_VIDEO_OUT;
+    get_param_mssd_video_knn(in_video_file,out_video_file);
+    std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
     init_video_knn(knn_bgs,knn_conf,capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
     cv::Mat frame;
     cv::Mat show_img;

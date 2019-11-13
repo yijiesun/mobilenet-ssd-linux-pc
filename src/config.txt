@@ -1,0 +1,10 @@
+mssd_img_in /home/syj/work/Tengine/tests/images/5man.png
+mssd_img_out /home/syj/work/Tengine/tests/result/result_5manve.jpg
+
+mssd_cvCaptrue_dev 0
+
+mssd_video_in /home/syj/work/Tengine/tests/video/motor.mp4
+mssd_video_out /home/syj/work/Tengine/tests/result/result_noknn_motor.avi
+
+mssd_video_knn_in /home/syj/work/Tengine/tests/video/test1.avi
+mssd_video_knn_out /home/syj/work/Tengine/tests/result/result_knn_test1.avi

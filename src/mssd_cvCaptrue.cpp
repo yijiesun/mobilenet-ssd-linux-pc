@@ -33,6 +33,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include "common.hpp"
+#include "config.h"
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
@@ -204,7 +205,11 @@ int main(int argc, char *argv[])
     int img_w = 300;
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
-    cv::VideoCapture capture(0);
+    int dev_num = 1;
+    get_param_mms_cvCaptrue(dev_num);
+    std::cout<<"open /dev/video"<<dev_num<<std::endl;
+
+    cv::VideoCapture capture(dev_num);
     capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
     capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
     cv::Mat frame;

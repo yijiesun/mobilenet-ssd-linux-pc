@@ -33,6 +33,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include "common.hpp"
+#include "config.h"
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
@@ -247,6 +248,8 @@ int main(int argc, char *argv[])
     VideoWriter outputVideo;
     std::string in_video_file =  root_path + DEF_VIDEO_IN;
     std::string out_video_file =  root_path + DEF_VIDEO_OUT;
+    get_param_mssd_video(in_video_file,out_video_file);
+    std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
     init_video(capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
     cv::Mat frame;
     int node_idx=0;

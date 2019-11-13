@@ -26,10 +26,10 @@ if ( NOT (ARM OR ANDROID))
 set (BLAS_LIB openblas)
 endif()
 
-set( CAPTRUE_SRCS src/mssd_cvCaptrue.cpp ../common/common.cpp)
-set( IMG_SRCS src/mssd_img.cpp ../common/common.cpp)
-set( VIDEO_KNN_SRCS src/mssd_video_knn.cpp src/knn/knn.cpp ../common/common.cpp)
-set( VIDEO_SRCS src/mssd_video.cpp src/knn/knn.cpp ../common/common.cpp)
+set( CAPTRUE_SRCS src/mssd_cvCaptrue.cpp src/config.cpp ../common/common.cpp)
+set( IMG_SRCS src/mssd_img.cpp src/config.cpp ../common/common.cpp)
+set( VIDEO_KNN_SRCS src/mssd_video_knn.cpp src/config.cpp src/knn/knn.cpp ../common/common.cpp)
+set( VIDEO_SRCS src/mssd_video.cpp src/knn/knn.cpp src/config.cpp ../common/common.cpp)
 #opencv
 find_package(OpenCV REQUIRED)
 
