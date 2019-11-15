@@ -8,12 +8,12 @@ using namespace cv;
 using namespace std;  
 
 #define FIND_ROI 1
-const float defaultDist2Threshold = 20.0f;// »Ò¶È¾ÛÀàãÐÖµ 20
+const float defaultDist2Threshold = 20.0f;// ï¿½Ò¶È¾ï¿½ï¿½ï¿½ï¿½ï¿½Öµ 20
 
 struct PixelHistory
 {
-	unsigned char *gray;// ÀúÊ·»Ò¶ÈÖµ
-	unsigned char *IsBG;// ¶ÔÓ¦»Ò¶ÈÖµµÄÇ°¾°/±³¾°ÅÐ¶Ï£¬1´ú±íÅÐ¶ÏÎª±³¾°£¬0´ú±íÅÐ¶ÏÎªÇ°¾°
+	unsigned char *gray;// ï¿½ï¿½Ê·ï¿½Ò¶ï¿½Öµ
+	unsigned char *IsBG;// ï¿½ï¿½Ó¦ï¿½Ò¶ï¿½Öµï¿½ï¿½Ç°ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶Ï£ï¿½1ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½0ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ÎªÇ°ï¿½ï¿½
 };
 
 class KNN_BGS  
@@ -37,7 +37,7 @@ public:
 	double tooSmalltoDrop;
 	string saveAdress;
 	vector<Rect> boundRect;
-	void init(VideoCapture &v_capture);
+	void init(/*VideoCapture &v_capture*/);
 	void knn_core();
 	void saveROI();
 	Mat bk;
@@ -54,7 +54,7 @@ public:
 	void paddingRecs(vector<Rect> &rects, int size);
 	void insideDilate(Mat & bimg, Mat & bout, int win_size, int scale);
 private:  
-	PixelHistory* framePixelHistory;// ¼ÇÂ¼Ò»Ö¡Í¼ÏñÖÐÃ¿¸öÏñËØµãµÄÀúÊ·ÐÅÏ¢
+	PixelHistory* framePixelHistory;// ï¿½ï¿½Â¼Ò»Ö¡Í¼ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½Ê·ï¿½ï¿½Ï¢
 	
 	int frameCnt;
 	

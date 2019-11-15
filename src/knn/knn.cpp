@@ -15,11 +15,11 @@ KNN_BGS::~KNN_BGS(void)
 	
 }
 
-void KNN_BGS::init(VideoCapture &v_capture)
+void KNN_BGS::init(/*VideoCapture &v_capture*/)
 {
 	int gray = 0;
-	FGMask.create(IMG_HGT, IMG_WID, CV_8UC1);// Êä³öÍ¼Ïñ³õÊ¼»¯
-										// framePixelHistory·ÖÅä¿Õ¼ä
+	FGMask.create(IMG_HGT, IMG_WID, CV_8UC1);// ï¿½ï¿½ï¿½Í¼ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½
+										// framePixelHistoryï¿½ï¿½ï¿½ï¿½Õ¼ï¿½
 	framePixelHistory = (PixelHistory*)malloc(IMG_WID*IMG_HGT * sizeof(PixelHistory));
 
 	for (int i = 0; i < IMG_WID*IMG_HGT; i++)
@@ -29,23 +29,24 @@ void KNN_BGS::init(VideoCapture &v_capture)
 		memset(framePixelHistory[i].gray, 0, (history_num + solid_frame) * sizeof(unsigned char));
 		memset(framePixelHistory[i].IsBG, 0, (history_num + solid_frame) * sizeof(unsigned char));
 	}
+	/*
 	for (int f = 0; f < solid_frame; f++)
 	{
 		v_capture >> bk;
 		cv::cvtColor(bk, bk, CV_BGR2GRAY);
-		//bkÖ¡¹Ì»¯ÔÚµÚÒ»¸öÎ»ÖÃ
+		//bkÖ¡ï¿½Ì»ï¿½ï¿½Úµï¿½Ò»ï¿½ï¿½Î»ï¿½ï¿½
 		for (int i = 0; i < IMG_HGT; i++)
 		{
 			for (int j = 0; j < IMG_WID; j++)
 			{
 				gray = bk.at<unsigned char>(i, j);
-				// ¸üÐÂÀúÊ·Öµ
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·Öµ
 				framePixelHistory[i*IMG_WID + j].gray[f] = gray;
-				framePixelHistory[i*IMG_WID + j].IsBG[f] = 1;// µ±Ç°µã×÷Îª±³¾°µã´æÈëÀúÊ·ÐÅÏ¢
+				framePixelHistory[i*IMG_WID + j].IsBG[f] = 1;// ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·ï¿½ï¿½Ï¢
 			}
 		}
 	}
-
+*/
 }
 
 void KNN_BGS::knn_core()
@@ -60,26 +61,26 @@ void KNN_BGS::knn_core()
 			gray = fgray.at<unsigned char>(i, j);
 			int fit = 0;
 			int fit_bg = 0;
-			// ±È½ÏÈ·¶¨Ç°¾°/±³¾°
+			// ï¿½È½ï¿½È·ï¿½ï¿½Ç°ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½
 			for (int n = 0; n < history_num + solid_frame; n++)
 			{
-				if (fabs((float)gray - framePixelHistory[i*IMG_WID + j].gray[n]) < defaultDist2Threshold)// »Ò¶È²î±ðÊÇ·ñÎ»ÓÚÉè¶¨ãÐÖµÄÚ
+				if (fabs((float)gray - framePixelHistory[i*IMG_WID + j].gray[n]) < defaultDist2Threshold)// ï¿½Ò¶È²ï¿½ï¿½ï¿½Ç·ï¿½Î»ï¿½ï¿½ï¿½è¶¨ï¿½ï¿½Öµï¿½ï¿½
 				{
 					fit++;
-					if (framePixelHistory[i*IMG_WID + j].IsBG[n])// ÀúÊ·ÐÅÏ¢¶ÔÓ¦µãÖ®Ç°±»ÅÐ¶ÏÎª±³¾°
+					if (framePixelHistory[i*IMG_WID + j].IsBG[n])// ï¿½ï¿½Ê·ï¿½ï¿½Ï¢ï¿½ï¿½Ó¦ï¿½ï¿½Ö®Ç°ï¿½ï¿½ï¿½Ð¶ï¿½Îªï¿½ï¿½ï¿½ï¿½
 					{
 						fit_bg++;
 					}
 				}
 			}
-			if (fit_bg >= knnv)// µ±Ç°µãÅÐ¶ÏÎª±³¾°
+			if (fit_bg >= knnv)// ï¿½ï¿½Ç°ï¿½ï¿½ï¿½Ð¶ï¿½Îªï¿½ï¿½ï¿½ï¿½
 			{
 				FGMask.at<unsigned char>(i, j) = 0;
 			}
-			// ¸üÐÂÀúÊ·Öµ
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·Öµ
 			int index = frameCnt % history_num + solid_frame;
 			framePixelHistory[i*IMG_WID + j].gray[index] = gray;
-			framePixelHistory[i*IMG_WID + j].IsBG[index] = fit >= knnv ? 1 : 0;// µ±Ç°µã×÷Îª±³¾°µã´æÈëÀúÊ·ÐÅÏ¢
+			framePixelHistory[i*IMG_WID + j].IsBG[index] = fit >= knnv ? 1 : 0;// ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·ï¿½ï¿½Ï¢
 		}
 	}
 	frameCnt++;
@@ -102,7 +103,7 @@ void KNN_BGS::postTreatment()
 
 bool sortFun(const cv::Rect &p1, const cv::Rect &p2)
 {
-	return p1.width * p1.height > p2.width * p2.height;//½µÐòÅÅÁÐ  
+	return p1.width * p1.height > p2.width * p2.height;//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½  
 }
 
 void KNN_BGS::getTopRects(vector<Rect> &rects0, vector<Rect> &rects)
@@ -121,7 +122,7 @@ void KNN_BGS::processRects()
 	std::vector<cv::Rect> boundRectTmp;
 	vector<vector<Point>> contours;
 	vector<Vec4i> hierarcy;
-	findContours(FGMask.clone(), contours, hierarcy, CV_RETR_EXTERNAL, CHAIN_APPROX_NONE); //²éÕÒÂÖÀª
+	findContours(FGMask.clone(), contours, hierarcy, CV_RETR_EXTERNAL, CHAIN_APPROX_NONE); //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int rec_nums = buildAndClearSmallContors(contours, boundRectTmp, minContorSize);
 	std::sort(boundRectTmp.begin(), boundRectTmp.end(), sortFun);
 	getTopRects(boundRectTmp, boundRect);
@@ -200,14 +201,14 @@ void KNN_BGS::drawRecs(Mat & img, vector<Rect> &rects, const Scalar& color)
 	int x0 = 0, y0 = 0, w0 = 0, h0 = 0;
 	for (int i = 0; i< rects.size(); i++)
 	{
-		x0 = rects[i].x;  //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ×óÉÏ½ÇµÄx×ø±ê
-		y0 = rects[i].y; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ×óÉÏ½ÇµÄy×ø±ê
-		w0 = rects[i].width; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ¿í¶È
-		h0 = rects[i].height; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ¸ß¶È
+		x0 = rects[i].x;  //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½Îµï¿½ï¿½ï¿½ï¿½Ï½Çµï¿½xï¿½ï¿½ï¿½ï¿½
+		y0 = rects[i].y; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½Îµï¿½ï¿½ï¿½ï¿½Ï½Çµï¿½yï¿½ï¿½ï¿½ï¿½
+		w0 = rects[i].width; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½ÎµÄ¿ï¿½ï¿½ï¿½
+		h0 = rects[i].height; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½ÎµÄ¸ß¶ï¿½
 
 		if (w0 <= tooSmalltoDrop || h0 <= tooSmalltoDrop)
 			continue;
-		rectangle(img, Point(x0, y0), Point(x0 + w0, y0 + h0), color, 2, 8); //»æÖÆµÚi¸öÍâ½Ó¾ØÐÎ
+		rectangle(img, Point(x0, y0), Point(x0 + w0, y0 + h0), color, 2, 8); //ï¿½ï¿½ï¿½Æµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½ï¿½
 	}
 }
 
@@ -263,11 +264,11 @@ void KNN_BGS::paddingRecs(vector<Rect> &rects, int size)
 	}
 }
 
-/*insideDilate:ÄÚÅòÕÍº¯Êý
-*ÏñËØµãÉÏÏÂ»òÕß×óÓÒÁ½±ßÍ¬Ê±ÓÐ°×ÏñËØµã¼Ð±ÆÊ±ÏòÄÚÅòÕÍ
-*bimg:¶þÖµÍ¼Ïñ
-*win_size:ËÑË÷´°¿Ú
-*scale:¼Ð±ÆÓÐÐ§ÏñËØÊýÁ¿
+/*insideDilate:ï¿½ï¿½ï¿½ï¿½ï¿½Íºï¿½ï¿½ï¿½
+*ï¿½ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½Â»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ê±ï¿½Ð°ï¿½ï¿½ï¿½ï¿½Øµï¿½Ð±ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+*bimg:ï¿½ï¿½ÖµÍ¼ï¿½ï¿½
+*win_size:ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+*scale:ï¿½Ð±ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 */
 void KNN_BGS::insideDilate(Mat & bimg, Mat & bout, int win_size, int scale)
 {
@@ -317,10 +318,10 @@ void KNN_BGS::saveROI()
 	int x0 = 0, y0 = 0, w0 = 0, h0 = 0;
 	for (int i = 0; i< boundRect.size(); i++)
 	{
-		x0 = boundRect[i].x;  //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ×óÉÏ½ÇµÄx×ø±ê
-		y0 = boundRect[i].y; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ×óÉÏ½ÇµÄy×ø±ê
-		w0 = boundRect[i].width; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ¿í¶È
-		h0 = boundRect[i].height; //»ñµÃµÚi¸öÍâ½Ó¾ØÐÎµÄ¸ß¶È
+		x0 = boundRect[i].x;  //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½Îµï¿½ï¿½ï¿½ï¿½Ï½Çµï¿½xï¿½ï¿½ï¿½ï¿½
+		y0 = boundRect[i].y; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½Îµï¿½ï¿½ï¿½ï¿½Ï½Çµï¿½yï¿½ï¿½ï¿½ï¿½
+		w0 = boundRect[i].width; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½ÎµÄ¿ï¿½ï¿½ï¿½
+		h0 = boundRect[i].height; //ï¿½ï¿½Ãµï¿½iï¿½ï¿½ï¿½ï¿½Ó¾ï¿½ï¿½ÎµÄ¸ß¶ï¿½
 
 		if (w0 <= tooSmalltoDrop || h0 <= tooSmalltoDrop)
 			continue;

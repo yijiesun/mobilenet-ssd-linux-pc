@@ -22,6 +22,8 @@
  * Author: chunyinglv@openailab.com
  */
 
+#include <signal.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <iostream>
 #include <iomanip>
@@ -34,15 +36,12 @@
 #include <stdio.h>
 #include "common.hpp"
 #include "config.h"
+#include "v4l2/v4l2.h"  
+#include "knn/knn.h"
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
-#define DEF_VIDEO_IN "tests/test1.avi"
-#define DEF_VIDEO_OUT "tests/result_noknn_test1.avi"
-using namespace cv;
-using namespace std;
-
 
 struct Box
 {
@@ -61,7 +60,14 @@ const char* class_names[] = {"background",
                         "sheep", "sofa", "train", "tvmonitor"};
 
 vector<Box>	boxes; 
+vector<Box>	boxes_all; 
 
+V4L2 v4l2_;
+cv::Mat rgb;
+bool quit;
+ pthread_mutex_t mutex_;
+void *v4l2_thread(void *threadarg);
+void my_handler(int s);
 // void get_input_data_ssd(std::string& image_file, float* input_data, int img_h,  int img_w)
 void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 {
@@ -96,7 +102,6 @@ void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 // void post_process_ssd(std::string& image_file,float threshold,float* outdata,int num,std::string& save_name)
 void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
 {
-
     // cv::Mat img = cv::imread(image_file);
     int raw_h = img.size().height;
     int raw_w = img.size().width;
@@ -120,7 +125,7 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
         }
         outdata+=6;
     }
- #if 1
+#if 0
     for(int i=0;i<(int)boxes.size();i++)
     {
         Box box=boxes[i];
@@ -142,20 +147,36 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
     // std::cout<<"[DETECTED IMAGE SAVED]:\t"<< save_name<<"\n";
     // std::cout<<"======================================\n";
 }
-void init_video(VideoCapture & v_capture,VideoWriter &outputVideo,const char *inVideoName,const char *outVideoName)
+void init_knn(KNN_BGS &knn_bgs,int *knn_conf)
 {
-		v_capture.open(inVideoName);
-		v_capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
-        Size sWH = Size( v_capture.get(CV_CAP_PROP_FRAME_WIDTH), v_capture.get(CV_CAP_PROP_FRAME_HEIGHT));
-		bool ret = outputVideo.open(outVideoName, cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
+        knn_bgs.IMG_WID = 640;
+		knn_bgs.IMG_HGT = 480;
+        knn_bgs.set(knn_conf);
+        knn_bgs.pos = 0;
+        knn_bgs.useTopRect = knn_conf[8];
+		knn_bgs.knn_over_percent = 0.001f;
+		knn_bgs.tooSmalltoDrop = knn_conf[9];
+		knn_bgs.dilateRatio =  knn_bgs.IMG_WID  / 320 * 5;
+        knn_bgs.init();
+}
+void togetherAllBox(double zoom_value,int x0,int y0 )
+{
+	for (int i = 0; i<boxes.size(); i++) {
+		float		bx0 = boxes[i].x0, by0 = boxes[i].y0, bx1= boxes[i].x1, by1 = boxes[i].y1;
+			boxes[i].x0= bx0 / zoom_value + x0;
+			boxes[i].y0 = by0 / zoom_value + y0;
+			boxes[i].x1 = bx1 / zoom_value + x0;
+			boxes[i].y1 = by1/ zoom_value + y0;
+		   boxes_all.push_back(boxes[i]);
+	}
 }
 
 void draw_img(Mat &img)
 {
     int line_width=300*0.002;
-    for(int i=0;i<(int)boxes.size();i++)
+    for(int i=0;i<(int)boxes_all.size();i++)
     {
-        Box box=boxes[i];
+        Box box=boxes_all[i];
         cv::rectangle(img, cv::Rect(box.x0, box.y0,(box.x1-box.x0),(box.y1-box.y0)),cv::Scalar(255, 255, 0),line_width);
         std::ostringstream score_str;
         score_str<<box.score;
@@ -173,11 +194,24 @@ void draw_img(Mat &img)
 
 int main(int argc, char *argv[])
 {
+   quit = false;
+    pthread_mutex_init(&mutex_, NULL);
     const std::string root_path = get_root_path();
     std::string proto_file;
     std::string model_file;
     std::string image_file;
+    std::string save_name="save.jpg";
+    KNN_BGS knn_bgs;
     float show_threshold=0.5;
+    int knn_conf[10] = { 0, 2, 1, 5, 0, 2, 4, 1, 5, 10};
+
+    struct sigaction sigIntHandler;
+ 
+   sigIntHandler.sa_handler = my_handler;
+   sigemptyset(&sigIntHandler.sa_mask);
+   sigIntHandler.sa_flags = 0;
+ 
+   sigaction(SIGINT, &sigIntHandler, NULL);
 
     int res;
     while( ( res=getopt(argc,argv,"p:m:i:h"))!= -1)
@@ -222,6 +256,20 @@ int main(int argc, char *argv[])
         std::cout<< "image file not specified,using "<<image_file<< " by default\n";
     }
 
+    std::string dev_num;
+    get_param_mms_V4L2(dev_num);
+    std::cout<<"open "<<dev_num<<std::endl;
+    init_knn(knn_bgs,knn_conf);
+    v4l2_.init(dev_num.c_str(),640,480);
+    v4l2_.open_device();
+	v4l2_.init_device();
+	v4l2_.start_capturing();
+
+    
+    rgb.create(480,640,CV_8UC3);
+	pthread_t threads_v4l2;
+	int rc = pthread_create(&threads_v4l2, NULL, v4l2_thread, NULL);
+
     // init tengine
     init_tengine_library();
     if (request_tengine_version("0.1") < 0)
@@ -241,19 +289,13 @@ int main(int argc, char *argv[])
     // input
     int img_h = 300;
     int img_w = 300;
-    int x0,y0,w0,h0;
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
-    cv::VideoCapture capture;
-    VideoWriter outputVideo;
-    std::string in_video_file =  root_path + DEF_VIDEO_IN;
-    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
-    get_param_mssd_video(in_video_file,out_video_file);
-    std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
-    init_video(capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
     cv::Mat frame;
+    cv::Mat show_img;
     int node_idx=0;
     int tensor_idx=0;
+    int x0,y0,w0,h0;
     tensor_t input_tensor = get_graph_input_tensor(graph, node_idx, tensor_idx);
     if(!check_tensor_valid(input_tensor))
     {
@@ -276,12 +318,77 @@ int main(int argc, char *argv[])
     while(1){
         struct timeval t0, t1;
         float total_time = 0.f;
-		if (!capture.read(frame))
-		{
-			cout<<"cannot open video or end of video"<<endl;
-            break;
-		}
 
+        pthread_mutex_lock(&mutex_);
+         frame = rgb.clone();
+        pthread_mutex_unlock(&mutex_);
+        knn_bgs.frame = frame.clone();
+        show_img  = frame.clone();
+        knn_bgs.pos ++;
+        knn_bgs.boundRect.clear();
+        knn_bgs.knn_core();
+        knn_bgs.postTreatment();
+        knn_bgs.processRects();
+        boxes_all.clear();
+        for (int i = 0; i< knn_bgs.boundRect.size(); i++)
+		{
+                double zoom_value;
+            	x0 = knn_bgs.boundRect[i].x;
+				y0 = knn_bgs.boundRect[i].y;
+				w0 = knn_bgs.boundRect[i].width; 
+				h0 = knn_bgs.boundRect[i].height; 
+                if (w0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize || h0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize)
+                    continue;
+                Mat	img_roi = knn_bgs.frame(cv::Rect(x0, y0, w0, h0));
+                Mat	img_show= show_img(cv::Rect(x0, y0, w0, h0));
+                Mat img_roi_big;
+                img_show.convertTo(img_show, img_show.type(), 1, 50);
+
+                if (img_roi.cols <= 100)
+				{
+					zoom_value = 200.0 / (double)(img_roi.cols);
+					int wid = cvRound(zoom_value * img_roi.cols);
+					int hgt = cvRound(zoom_value * img_roi.rows);
+					resize(img_roi, img_roi_big, Size(wid, hgt));
+				}
+				else if (img_roi.cols <= 200)
+				{
+					img_roi_big = img_roi;
+                    zoom_value = 1;
+				}
+				else
+				{
+					zoom_value = 200.0 / (double)(img_roi.cols);
+					int wid = cvRound(zoom_value * img_roi.cols);
+					int hgt = cvRound(zoom_value * img_roi.rows);
+					resize(img_roi, img_roi_big, Size(wid, hgt));
+				}
+
+                for (int i = 0; i < repeat_count; i++)
+                {
+                    get_input_data_ssd(img_roi_big, input_data, img_h,  img_w);
+
+                    gettimeofday(&t0, NULL);
+                    set_tensor_buffer(input_tensor, input_data, img_size * 4);
+                    run_graph(graph, 1);
+
+                    gettimeofday(&t1, NULL);
+                    float mytime = (float)((t1.tv_sec * 1000000 + t1.tv_usec) - (t0.tv_sec * 1000000 + t0.tv_usec)) / 1000;
+                    total_time += mytime;
+
+                }
+
+                tensor_t out_tensor = get_graph_output_tensor(graph, 0,0);//"detection_out");
+                get_tensor_shape( out_tensor, out_dim, 4);
+                outdata = (float *)get_tensor_buffer(out_tensor);
+
+                int num=out_dim[1];
+                
+                post_process_ssd(img_roi_big, show_threshold, outdata, num);
+                togetherAllBox(zoom_value,x0,y0);
+         }
+
+        
         for (int i = 0; i < repeat_count; i++)
         {
             get_input_data_ssd(frame, input_data, img_h,  img_w);
@@ -303,25 +410,46 @@ int main(int argc, char *argv[])
         int num=out_dim[1];
         
         post_process_ssd(frame, show_threshold, outdata, num);
-
-        draw_img(frame);
-
+        togetherAllBox(1,0,0);
+        draw_img(show_img);
         std::cout << "--------------------------------------\n";
         std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
-        outputVideo.write(frame);
-
-        cv::imshow("MSSD", frame);
-        if( cv::waitKey(10) == 'q' )
-            break;
+        cv::imshow("MSSD", show_img);
+        cv::waitKey(10) ;
+        if (quit)
+             break;
     }
-
+    pthread_join(threads_v4l2,NULL);
+    v4l2_.stop_capturing();
+    v4l2_.uninit_device();
+    v4l2_.close_device();
     postrun_graph(graph);
     free(input_data);
     destroy_runtime_graph(graph);
     remove_model(model_name);
-    outputVideo.release();
-    capture.release();
+
     return 0;
 }
 
 
+void *v4l2_thread(void *threadarg)
+{
+	while (1)
+	{
+        pthread_mutex_lock(&mutex_);
+        v4l2_.read_frame(rgb);
+        pthread_mutex_unlock(&mutex_);
+        cv::waitKey(10) ;
+        if (quit)
+            break;
+        
+    }
+}
+
+
+void my_handler(int s)
+{
+            quit = true;
+            cout<<"Caught signal "<<s<<" quit="<<quit<<endl;
+}
+ 

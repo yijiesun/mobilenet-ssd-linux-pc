@@ -147,7 +147,7 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
 void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,VideoCapture & v_capture,VideoWriter &outputVideo,const char *inVideoName,const char *outVideoName)
 {
 		v_capture.open(inVideoName);
-		v_capture.set(CV_CAP_PROP_FOURCC, CV_FOURCC('M', 'J', 'P', 'G'));
+		v_capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
         knn_bgs.IMG_WID = v_capture.get(CV_CAP_PROP_FRAME_WIDTH);
 		knn_bgs.IMG_HGT = v_capture.get(CV_CAP_PROP_FRAME_HEIGHT);
         knn_bgs.set(knn_conf);
@@ -156,10 +156,10 @@ void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,VideoCapture & v_capture,Vide
 		knn_bgs.knn_over_percent = 0.001f;
 		knn_bgs.tooSmalltoDrop = knn_conf[9];
 		knn_bgs.dilateRatio =  knn_bgs.IMG_WID  / 320 * 5;
-        knn_bgs.init(v_capture);
+        knn_bgs.init(/*v_capture*/);
 
         Size sWH = Size( knn_bgs.IMG_WID, knn_bgs.IMG_HGT);
-		bool ret = outputVideo.open(outVideoName, CV_FOURCC('M', 'P', '4', '2'), 25, sWH);
+		bool ret = outputVideo.open(outVideoName, cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
 }
 void togetherAllBox(double zoom_value,int x0,int y0 )
 {

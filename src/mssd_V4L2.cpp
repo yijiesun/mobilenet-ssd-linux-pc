@@ -22,6 +22,8 @@
  * Author: chunyinglv@openailab.com
  */
 
+#include <signal.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <iostream>
 #include <iomanip>
@@ -34,15 +36,11 @@
 #include <stdio.h>
 #include "common.hpp"
 #include "config.h"
+#include "v4l2/v4l2.h"  
 
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
-#define DEF_VIDEO_IN "tests/test1.avi"
-#define DEF_VIDEO_OUT "tests/result_noknn_test1.avi"
-using namespace cv;
-using namespace std;
-
 
 struct Box
 {
@@ -53,15 +51,13 @@ struct Box
     int class_idx;
     float score;
 };
-const char* class_names[] = {"background",
-                        "aeroplane", "bicycle", "bird", "boat",
-                        "bottle", "bus", "car", "cat", "chair",
-                        "cow", "diningtable", "dog", "horse",
-                        "motorbike", "person", "pottedplant",
-                        "sheep", "sofa", "train", "tvmonitor"};
 
-vector<Box>	boxes; 
-
+V4L2 v4l2_;
+cv::Mat rgb;
+bool quit;
+ pthread_mutex_t mutex_;
+void *v4l2_thread(void *threadarg);
+void my_handler(int s);
 // void get_input_data_ssd(std::string& image_file, float* input_data, int img_h,  int img_w)
 void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 {
@@ -96,11 +92,16 @@ void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 // void post_process_ssd(std::string& image_file,float threshold,float* outdata,int num,std::string& save_name)
 void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
 {
-
+    const char* class_names[] = {"background",
+                            "aeroplane", "bicycle", "bird", "boat",
+                            "bottle", "bus", "car", "cat", "chair",
+                            "cow", "diningtable", "dog", "horse",
+                            "motorbike", "person", "pottedplant",
+                            "sheep", "sofa", "train", "tvmonitor"};
     // cv::Mat img = cv::imread(image_file);
     int raw_h = img.size().height;
     int raw_w = img.size().width;
-    boxes.clear();
+    std::vector<Box> boxes;
     int line_width=raw_w*0.002;
     printf("detect ruesult num: %d \n",num);
     for (int i=0;i<num;i++)
@@ -120,7 +121,6 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
         }
         outdata+=6;
     }
- #if 1
     for(int i=0;i<(int)boxes.size();i++)
     {
         Box box=boxes[i];
@@ -136,48 +136,29 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
         cv::putText(img, label, cv::Point(box.x0, box.y0),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
     }
-#endif
     // cv::imwrite(save_name,img);
     // std::cout<<"======================================\n";
     // std::cout<<"[DETECTED IMAGE SAVED]:\t"<< save_name<<"\n";
     // std::cout<<"======================================\n";
 }
-void init_video(VideoCapture & v_capture,VideoWriter &outputVideo,const char *inVideoName,const char *outVideoName)
-{
-		v_capture.open(inVideoName);
-		v_capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
-        Size sWH = Size( v_capture.get(CV_CAP_PROP_FRAME_WIDTH), v_capture.get(CV_CAP_PROP_FRAME_HEIGHT));
-		bool ret = outputVideo.open(outVideoName, cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
-}
-
-void draw_img(Mat &img)
-{
-    int line_width=300*0.002;
-    for(int i=0;i<(int)boxes.size();i++)
-    {
-        Box box=boxes[i];
-        cv::rectangle(img, cv::Rect(box.x0, box.y0,(box.x1-box.x0),(box.y1-box.y0)),cv::Scalar(255, 255, 0),line_width);
-        std::ostringstream score_str;
-        score_str<<box.score;
-        std::string label = std::string(class_names[box.class_idx]) + ": " + score_str.str();
-        int baseLine = 0;
-        cv::Size label_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        cv::rectangle(img, cv::Rect(cv::Point(box.x0,box.y0- label_size.height),
-                                  cv::Size(label_size.width, label_size.height + baseLine)),
-                      cv::Scalar(255, 255, 0), CV_FILLED);
-        cv::putText(img, label, cv::Point(box.x0, box.y0),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
-    }
-
-}
 
 int main(int argc, char *argv[])
 {
+   quit = false;
+    pthread_mutex_init(&mutex_, NULL);
     const std::string root_path = get_root_path();
     std::string proto_file;
     std::string model_file;
     std::string image_file;
-    float show_threshold=0.5;
+    std::string save_name="save.jpg";
+
+    struct sigaction sigIntHandler;
+ 
+   sigIntHandler.sa_handler = my_handler;
+   sigemptyset(&sigIntHandler.sa_mask);
+   sigIntHandler.sa_flags = 0;
+ 
+   sigaction(SIGINT, &sigIntHandler, NULL);
 
     int res;
     while( ( res=getopt(argc,argv,"p:m:i:h"))!= -1)
@@ -222,6 +203,20 @@ int main(int argc, char *argv[])
         std::cout<< "image file not specified,using "<<image_file<< " by default\n";
     }
 
+    std::string dev_num;
+    get_param_mms_V4L2(dev_num);
+    std::cout<<"open "<<dev_num<<std::endl;
+
+    v4l2_.init(dev_num.c_str(),640,480);
+    v4l2_.open_device();
+	v4l2_.init_device();
+	v4l2_.start_capturing();
+
+    
+    rgb.create(480,640,CV_8UC3);
+	pthread_t threads_v4l2;
+	int rc = pthread_create(&threads_v4l2, NULL, v4l2_thread, NULL);
+
     // init tengine
     init_tengine_library();
     if (request_tengine_version("0.1") < 0)
@@ -241,16 +236,8 @@ int main(int argc, char *argv[])
     // input
     int img_h = 300;
     int img_w = 300;
-    int x0,y0,w0,h0;
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
-    cv::VideoCapture capture;
-    VideoWriter outputVideo;
-    std::string in_video_file =  root_path + DEF_VIDEO_IN;
-    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
-    get_param_mssd_video(in_video_file,out_video_file);
-    std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
-    init_video(capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
     cv::Mat frame;
     int node_idx=0;
     int tensor_idx=0;
@@ -276,11 +263,10 @@ int main(int argc, char *argv[])
     while(1){
         struct timeval t0, t1;
         float total_time = 0.f;
-		if (!capture.read(frame))
-		{
-			cout<<"cannot open video or end of video"<<endl;
-            break;
-		}
+
+        pthread_mutex_lock(&mutex_);
+         frame = rgb.clone();
+        pthread_mutex_unlock(&mutex_);
 
         for (int i = 0; i < repeat_count; i++)
         {
@@ -295,33 +281,50 @@ int main(int argc, char *argv[])
             total_time += mytime;
 
         }
-
+        std::cout << "--------------------------------------\n";
+        std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
         tensor_t out_tensor = get_graph_output_tensor(graph, 0,0);//"detection_out");
         get_tensor_shape( out_tensor, out_dim, 4);
         outdata = (float *)get_tensor_buffer(out_tensor);
 
         int num=out_dim[1];
-        
+        float show_threshold=0.5;
         post_process_ssd(frame, show_threshold, outdata, num);
-
-        draw_img(frame);
-
-        std::cout << "--------------------------------------\n";
-        std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
-        outputVideo.write(frame);
-
         cv::imshow("MSSD", frame);
-        if( cv::waitKey(10) == 'q' )
-            break;
+        cv::waitKey(10) ;
+        if (quit)
+             break;
     }
-
+    pthread_join(threads_v4l2,NULL);
+	v4l2_.stop_capturing();
+	v4l2_.uninit_device();
+	v4l2_.close_device();
     postrun_graph(graph);
     free(input_data);
     destroy_runtime_graph(graph);
     remove_model(model_name);
-    outputVideo.release();
-    capture.release();
+
     return 0;
 }
 
 
+void *v4l2_thread(void *threadarg)
+{
+	while (1)
+	{
+        pthread_mutex_lock(&mutex_);
+        v4l2_.read_frame(rgb);
+        pthread_mutex_unlock(&mutex_);
+        cv::waitKey(10) ;
+        if (quit)
+            pthread_exit(NULL);
+    }
+}
+
+
+void my_handler(int s)
+{
+            quit = true;
+            cout<<"Caught signal "<<s<<" quit="<<quit<<endl;
+}
+ 
