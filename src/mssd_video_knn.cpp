@@ -109,6 +109,8 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
     {
         if(outdata[1]>=threshold)
         {
+            if(outdata[0]!=15)
+                break;
             Box box;
             box.class_idx=outdata[0];
             box.score=outdata[1];

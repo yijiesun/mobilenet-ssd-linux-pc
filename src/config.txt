@@ -23,5 +23,5 @@ mssd_v4l2_dev /dev/video0
 mssd_video_in /home/syj/work/Tengine/tests/video/test1.avi
 mssd_video_out /home/syj/work/Tengine/tests/result/result_noknn_test1.avi
 
-mssd_video_knn_in /home/syj/work/Tengine/tests/video/test0.avi
-mssd_video_knn_out /home/syj/work/Tengine/tests/result/result_knn_test0.avi
+mssd_video_knn_in /home/syj/cap_data/vid/2019-11-19-16-47-40-774.avi
+mssd_video_knn_out /home/syj/cap_data/out/2019-11-19-16-47-40-774.avi

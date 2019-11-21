@@ -1,3 +1,5 @@
+#ifndef V4L2_H
+#define V4L2_H
 #include <iostream>
 #include <time.h>
 #include <stdio.h>
@@ -48,3 +50,4 @@ public :
 	void close_device(void);
 	void yuyv_to_bgr(unsigned char* yuv,unsigned char* rgb,int width, int height );
 };
+#endif
