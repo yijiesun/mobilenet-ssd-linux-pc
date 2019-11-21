@@ -62,6 +62,10 @@ const char* class_names[] = {"background",
 
 vector<Box>	boxes; 
 
+  /************MASK-ROI************/
+Mat mask;
+  /************MASK-ROI************/
+
 // void get_input_data_ssd(std::string& image_file, float* input_data, int img_h,  int img_w)
 void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 {
@@ -248,6 +252,18 @@ int main(int argc, char *argv[])
     VideoWriter outputVideo;
     std::string in_video_file =  root_path + DEF_VIDEO_IN;
     std::string out_video_file =  root_path + DEF_VIDEO_OUT;
+
+    /************MASK-ROI************/
+    bool is_roi_limit;
+    get_roi_limit(is_roi_limit);
+    std::cout<<"is_roi_limit: "<<is_roi_limit<<std::endl;
+    if(is_roi_limit)
+        mask=imread("mask.jpg");
+    Mat process_frame,show_img;
+    process_frame.create(480,640,CV_8UC3);
+    show_img.create(480,640,CV_8UC3);
+    /************MASK-ROI************/
+
     get_param_mssd_video(in_video_file,out_video_file);
     std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
     init_video(capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
@@ -281,10 +297,23 @@ int main(int argc, char *argv[])
 			cout<<"cannot open video or end of video"<<endl;
             break;
 		}
+        
+          /************MASK-ROI************/
+        if(is_roi_limit)
+        {
+            bitwise_and(frame,mask,process_frame);
+            addWeighted(frame,0.8,mask,0.3,-1,show_img);
+        }
+        else
+        {
+            process_frame = frame;
+            show_img = frame;
+        }
+        /************MASK-ROI************/
 
         for (int i = 0; i < repeat_count; i++)
         {
-            get_input_data_ssd(frame, input_data, img_h,  img_w);
+            get_input_data_ssd(process_frame, input_data, img_h,  img_w);
 
             gettimeofday(&t0, NULL);
             set_tensor_buffer(input_tensor, input_data, img_size * 4);
@@ -302,15 +331,15 @@ int main(int argc, char *argv[])
 
         int num=out_dim[1];
         
-        post_process_ssd(frame, show_threshold, outdata, num);
+        post_process_ssd(process_frame, show_threshold, outdata, num);
 
-        draw_img(frame);
+        draw_img(show_img);
 
         std::cout << "--------------------------------------\n";
         std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
-        outputVideo.write(frame);
+        outputVideo.write(show_img);
 
-        cv::imshow("MSSD", frame);
+        cv::imshow("MSSD", show_img);
         if( cv::waitKey(10) == 'q' )
             break;
     }

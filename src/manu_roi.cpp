@@ -24,12 +24,12 @@
 using namespace std;
 using namespace cv;
 
+int mode;// 0-camera 1-img 2-video
 int key;
 int draw_mask_flag; //0-null 1-new draw line 2-drawing 3-save 4-show result
 bool quit;
 bool save;
-Mat img,show_img,show_img_out,Mask,Mask_out;
-unsigned char *mask;
+Mat origin,mask_line_add_origin_hole,mask_line_color,mask_line_add_origin_solid,mask_line_gray,mask_solid,bitMat;
 Point p1, p2,pb;
 int isDrawing;
 void *keyboard_thread(void *threadarg);
@@ -41,12 +41,46 @@ void generate_and_save_mask(char * filename);
 
 int main()
 {
+    mode =0;
     int dev_num = 1;
     get_param_mms_cvCaptrue(dev_num);
     std::cout<<"open /dev/video"<<dev_num<<std::endl;
+    std::string img_in,tmp,video_in;
+    get_param_mssd_img(img_in,tmp);
+    std::cout<<"img_in "<<img_in<<std::endl;
+    get_param_mssd_video(video_in,tmp);
+    std::cout<<"video_in "<<video_in<<std::endl;
+
     cv::VideoCapture capture(dev_num);
-    capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
-    capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
+    if(!capture.isOpened())
+    {
+        mode = 1;
+        cout<<"fail to open camera! try to open  img"<<endl;
+        origin = imread(img_in.c_str());
+       
+        if(origin.empty())
+        {
+            cout<<"fail to open camera! try to open  video"<<endl;
+             mode = 2;
+        }
+        else
+             resize(origin,origin,Size(640,480));
+        
+        
+        
+    }
+	if(mode == 0)
+    {
+        capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
+        capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
+        capture >> origin;
+    }
+    else if(mode ==2)
+    {
+        capture.open(video_in.c_str());
+		capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
+    }
+
     pb.x=-1;
     key = 0;
     draw_mask_flag = 1;
@@ -57,46 +91,66 @@ int main()
    sigIntHandler.sa_flags = 0;
    sigaction(SIGINT, &sigIntHandler, NULL);
 
-    mask = (unsigned char *)malloc(640*480/8);
-
-    capture >> img;
 	//img = imread("/home/syj/cap_data/img/2019-11-15-11-39-55-465.jpg");
     
-    Mask.create(img.rows,img.cols,CV_8UC1);
-    Mask_out.create(img.rows,img.cols,CV_8UC1);
-    show_img.create(img.rows,img.cols,CV_8UC3);
-    show_img_out.create(img.rows,img.cols,CV_8UC3);
-    memset(Mask_out.data,255,640*480*sizeof(uchar));
-    memset(show_img.data,0,3*640*480*sizeof(uchar));
+    mask_line_gray.create(480,640,CV_8UC1);
+    mask_solid.create(480,640,CV_8UC1);
+    mask_line_color.create(480,640,CV_8UC3);
+    mask_line_add_origin_hole.create(480,640,CV_8UC3);
+    mask_line_add_origin_solid.create(480,640,CV_8UC3);
+    mask_solid =Mat::ones(480,640,CV_8UC1)*255;
+    mask_line_gray =Mat::zeros(480,640,CV_8UC1);
+    mask_line_color =Mat::zeros(480,640,CV_8UC3);
+    //memset(mask_solid.data,255,640*480*sizeof(uchar));
+    //memset(mask_line_color.data,0,3*640*480*sizeof(uchar));
 	namedWindow("image");
 	setMouseCallback("image", draw);
 
 	pthread_t keyboard;
 	int rc = pthread_create(&keyboard, NULL, keyboard_thread, NULL);
+
+        Mat tmp_color,tmp_gray;
+        tmp_gray.create(480,640,CV_8UC1);
+        tmp_color.create(480,640,CV_8UC3);
+
     while(1)
     {
-        capture >> img;
-        addWeighted(show_img,1,img,1,-1,show_img_out);
+        if(mode == 0 || mode==2)
+        {
+            capture >> origin;
+            if(origin.empty())
+                break;
+            resize(origin,origin,Size(640,480));
+        }
+        
+        cvtColor(mask_line_color, tmp_gray, COLOR_RGB2GRAY);
+        tmp_gray*=255;
+        cvtColor(tmp_gray, tmp_color, COLOR_GRAY2RGB);
+        bitwise_not(tmp_color,tmp_color);
+        bitwise_and(origin,tmp_color,tmp_color);
+        bitwise_or(tmp_color,mask_line_color,mask_line_add_origin_hole);
+        mask_line_add_origin_solid = mask_line_add_origin_hole.clone();
+        //addWeighted(mask_line_color,0.8,img,1,-1,mask_line_add_origin_solid);
         if(draw_mask_flag == 3)
         {
-            imshow("image", Mask);
-             waitKey(800);
+            imshow("image", mask_line_gray);
+             waitKey(1800);
             draw_mask_flag = 4;
             generate_and_save_mask("mask.jpg");
-             imshow("image", Mask_out);
+             imshow("image", mask_solid);
              waitKey(1000);
-             Mat mask_color;
-             cvtColor(Mask_out, mask_color, COLOR_GRAY2RGB);
-             addWeighted(show_img_out,0.8,mask_color,0.3,-1,show_img_out);
-             imwrite("mask_img.jpg",show_img_out);
+             Mat mask_solid_color;
+             cvtColor(mask_solid, mask_solid_color, COLOR_GRAY2RGB);
+             addWeighted(mask_line_add_origin_solid,0.8,mask_solid_color,0.3,-1,mask_line_add_origin_solid);
+             imwrite("mask_img.jpg",mask_line_add_origin_solid);
         }
         else if(draw_mask_flag == 4)
         {
-             Mat mask_color;
-             cvtColor(Mask_out, mask_color, COLOR_GRAY2RGB);
-             addWeighted(show_img_out,0.8,mask_color,0.3,-1,show_img_out);
+             Mat mask_solid_color;
+             cvtColor(mask_solid, mask_solid_color, COLOR_GRAY2RGB);
+             addWeighted(mask_line_add_origin_solid,0.8,mask_solid_color,0.3,-1,mask_line_add_origin_solid);
         }
-        imshow("image", show_img_out);
+        imshow("image", mask_line_add_origin_solid);
         waitKey(30);
         if (quit)
          break;
@@ -118,9 +172,13 @@ void *keyboard_thread(void *threadarg)
         //s-115  d-100 c-99
         if(key == 100)
         {   key = 0;
-            memset(show_img.data,0,3*640*480*sizeof(uchar));
-            memset(Mask_out.data,255,640*480*sizeof(uchar));
-            memset(Mask.data,0,640*480*sizeof(uchar));
+            mask_line_color =Mat::zeros(480,640,CV_8UC3);
+            mask_solid =Mat::ones(480,640,CV_8UC1)*255;
+            mask_line_gray =Mat::zeros(480,640,CV_8UC1);
+
+            //memset(mask_line_color.data,0,3*640*480*sizeof(uchar));
+            //memset(mask_solid.data,255,640*480*sizeof(uchar));
+            //memset(mask_line_gray.data,0,640*480*sizeof(uchar));
             draw_mask_flag = 1;
             save=false;
             pb.x=-1;
@@ -187,8 +245,8 @@ static void draw(int event, int x, int y, int flags, void *)
                     p1 = p2;
                  isDrawing = 1;
                 cout << "drawing  "<<x<<","<<y<< endl;
-                line(show_img, p1, p2, Scalar(0, 0, 255));
-                line(Mask, p1, p2, Scalar(255, 255, 255));
+                line(mask_line_color, p1, p2, Scalar(0, 0, 255),3);
+                line(mask_line_gray, p1, p2, Scalar(255, 255, 255),1);
                 if(pb.x==-1)
                     pb = p2;
                 p1 = p2;
@@ -206,8 +264,8 @@ static void draw(int event, int x, int y, int flags, void *)
         if(isDrawing==2)
         {
             p2 = Point(CLIP(x,639), CLIP(y,479));
-            line(show_img, p1, p2, Scalar(0, 0, 255));
-            line(Mask, p1, p2, Scalar(255, 255, 255));
+            line(mask_line_color, p1, p2, Scalar(0, 0, 255),3);
+            line(mask_line_gray, p1, p2, Scalar(255, 255, 255));
              if(pb.x==-1)
                 pb = p2;
             p1 = p2;
@@ -221,8 +279,8 @@ static void draw(int event, int x, int y, int flags, void *)
     }
     else if(draw_mask_flag == 2&&(flags&CV_EVENT_MBUTTONUP))
     {
-        line(show_img, p1, pb, Scalar(0, 0, 255));
-        line(Mask, p1, pb, Scalar(255, 255, 255));
+        line(mask_line_color, p1, pb, Scalar(0, 0, 255),3);
+        line(mask_line_gray, p1, pb, Scalar(255, 255, 255));
         cout << "line begin point "<< endl;
     }
         if(isDrawing == 0)
@@ -236,10 +294,10 @@ void generate_and_save_mask(char * filename)
     {
         for(int h=0;h<480;h++)
         {
-            if(*(Mask.data+h*640+w)!=0)
+            if(*(mask_line_gray.data+h*640+w)!=0)
                 break;
             else
-                *(Mask_out.data+h*640+w) = 0;
+                *(mask_solid.data+h*640+w) = 0;
             
         }
     }
@@ -248,14 +306,14 @@ void generate_and_save_mask(char * filename)
     {
         for(int h=479;h>=0;h--)
         {
-            if(*(Mask.data+h*640+w)!=0)
+            if(*(mask_line_gray.data+h*640+w)!=0)
                 break;
             else
-                *(Mask_out.data+h*640+w) = 0;
+                *(mask_solid.data+h*640+w) = 0;
             
         }
     }
 
-    imwrite(filename,Mask_out);
+    imwrite(filename,mask_solid);
 
 };

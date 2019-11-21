@@ -61,7 +61,9 @@ const char* class_names[] = {"background",
 
 vector<Box>	boxes; 
 vector<Box>	boxes_all; 
-
+  /************MASK-ROI************/
+Mat mask;
+  /************MASK-ROI************/
 V4L2 v4l2_;
 cv::Mat rgb;
 bool quit;
@@ -267,6 +269,16 @@ int main(int argc, char *argv[])
 	v4l2_.init_device();
 	v4l2_.start_capturing();
 
+    /************MASK-ROI************/
+    bool is_roi_limit;
+    get_roi_limit(is_roi_limit);
+    std::cout<<"is_roi_limit: "<<is_roi_limit<<std::endl;
+    if(is_roi_limit)
+        mask=imread("mask.jpg");
+    Mat process_frame,show_img;
+    process_frame.create(480,640,CV_8UC3);
+    show_img.create(480,640,CV_8UC3);
+    /************MASK-ROI************/
     
     rgb.create(480,640,CV_8UC3);
 	pthread_t threads_v4l2;
@@ -294,7 +306,6 @@ int main(int argc, char *argv[])
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
     cv::Mat frame;
-    cv::Mat show_img;
     int node_idx=0;
     int tensor_idx=0;
     int x0,y0,w0,h0;
@@ -324,8 +335,20 @@ int main(int argc, char *argv[])
         pthread_mutex_lock(&mutex_);
          frame = rgb.clone();
         pthread_mutex_unlock(&mutex_);
-        knn_bgs.frame = frame.clone();
-        show_img  = frame.clone();
+        /************MASK-ROI************/
+        if(is_roi_limit)
+        {
+            bitwise_and(frame,mask,process_frame);
+            addWeighted(frame,0.8,mask,0.3,-1,show_img);
+        }
+        else
+        {
+            process_frame = frame;
+            show_img = frame.clone();
+        }
+        /************MASK-ROI************/
+
+        knn_bgs.frame = process_frame.clone();
         knn_bgs.pos ++;
         knn_bgs.boundRect.clear();
         knn_bgs.knn_core();
@@ -393,7 +416,7 @@ int main(int argc, char *argv[])
         
         for (int i = 0; i < repeat_count; i++)
         {
-            get_input_data_ssd(frame, input_data, img_h,  img_w);
+            get_input_data_ssd(process_frame, input_data, img_h,  img_w);
 
             gettimeofday(&t0, NULL);
             set_tensor_buffer(input_tensor, input_data, img_size * 4);
@@ -411,7 +434,7 @@ int main(int argc, char *argv[])
 
         int num=out_dim[1];
         
-        post_process_ssd(frame, show_threshold, outdata, num);
+        post_process_ssd(process_frame, show_threshold, outdata, num);
         togetherAllBox(1,0,0);
         draw_img(show_img);
         std::cout << "--------------------------------------\n";

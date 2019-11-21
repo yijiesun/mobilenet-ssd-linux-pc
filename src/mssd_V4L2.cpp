@@ -53,6 +53,9 @@ struct Box
 };
 
 V4L2 v4l2_;
+  /************MASK-ROI************/
+Mat mask;
+  /************MASK-ROI************/
 cv::Mat rgb;
 bool quit;
  pthread_mutex_t mutex_;
@@ -90,7 +93,7 @@ void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 }
 
 // void post_process_ssd(std::string& image_file,float threshold,float* outdata,int num,std::string& save_name)
-void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
+void post_process_ssd(cv::Mat &img,cv::Mat &show, float threshold,float* outdata,int num)
 {
     const char* class_names[] = {"background",
                             "aeroplane", "bicycle", "bird", "boat",
@@ -124,16 +127,16 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
     for(int i=0;i<(int)boxes.size();i++)
     {
         Box box=boxes[i];
-        cv::rectangle(img, cv::Rect(box.x0, box.y0,(box.x1-box.x0),(box.y1-box.y0)),cv::Scalar(255, 255, 0),line_width);
+        cv::rectangle(show, cv::Rect(box.x0, box.y0,(box.x1-box.x0),(box.y1-box.y0)),cv::Scalar(255, 255, 0),line_width);
         std::ostringstream score_str;
         score_str<<box.score;
         std::string label = std::string(class_names[box.class_idx]) + ": " + score_str.str();
         int baseLine = 0;
         cv::Size label_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        cv::rectangle(img, cv::Rect(cv::Point(box.x0,box.y0- label_size.height),
+        cv::rectangle(show, cv::Rect(cv::Point(box.x0,box.y0- label_size.height),
                                   cv::Size(label_size.width, label_size.height + baseLine)),
                       cv::Scalar(255, 255, 0), CV_FILLED);
-        cv::putText(img, label, cv::Point(box.x0, box.y0),
+        cv::putText(show, label, cv::Point(box.x0, box.y0),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
     }
     // cv::imwrite(save_name,img);
@@ -207,6 +210,17 @@ int main(int argc, char *argv[])
     get_param_mms_V4L2(dev_num);
     std::cout<<"open "<<dev_num<<std::endl;
 
+    /************MASK-ROI************/
+    bool is_roi_limit;
+    get_roi_limit(is_roi_limit);
+    std::cout<<"is_roi_limit: "<<is_roi_limit<<std::endl;
+    if(is_roi_limit)
+        mask=imread("mask.jpg");
+    Mat process_frame,show_img;
+    process_frame.create(480,640,CV_8UC3);
+    show_img.create(480,640,CV_8UC3);
+    /************MASK-ROI************/
+
     v4l2_.init(dev_num.c_str(),640,480);
     v4l2_.open_device();
 	v4l2_.init_device();
@@ -238,7 +252,12 @@ int main(int argc, char *argv[])
     int img_w = 300;
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
-    cv::Mat frame;
+
+    cv::Mat frame,msk_color;
+    frame.create(480,640,CV_8UC3);
+    msk_color.create(480,640,CV_8UC3);
+    
+
     int node_idx=0;
     int tensor_idx=0;
     tensor_t input_tensor = get_graph_input_tensor(graph, node_idx, tensor_idx);
@@ -264,13 +283,27 @@ int main(int argc, char *argv[])
         struct timeval t0, t1;
         float total_time = 0.f;
 
-        pthread_mutex_lock(&mutex_);
+        //pthread_mutex_lock(&mutex_);
          frame = rgb.clone();
-        pthread_mutex_unlock(&mutex_);
-
+        //pthread_mutex_unlock(&mutex_);
+        
+        /************MASK-ROI************/
+        if(is_roi_limit)
+        {
+            bitwise_and(frame,mask,process_frame);
+            addWeighted(frame,0.8,mask,0.3,-1,show_img);
+        }
+        else
+        {
+            process_frame = frame;
+            show_img = frame.clone();
+        }
+        /************MASK-ROI************/
+            
+        
         for (int i = 0; i < repeat_count; i++)
         {
-            get_input_data_ssd(frame, input_data, img_h,  img_w);
+            get_input_data_ssd(process_frame, input_data, img_h,  img_w);
 
             gettimeofday(&t0, NULL);
             set_tensor_buffer(input_tensor, input_data, img_size * 4);
@@ -289,8 +322,8 @@ int main(int argc, char *argv[])
 
         int num=out_dim[1];
         float show_threshold=0.5;
-        post_process_ssd(frame, show_threshold, outdata, num);
-        cv::imshow("MSSD", frame);
+        post_process_ssd(process_frame, show_img, show_threshold, outdata, num);
+        cv::imshow("MSSD", show_img);
         cv::waitKey(10) ;
         if (quit)
              break;
@@ -312,9 +345,9 @@ void *v4l2_thread(void *threadarg)
 {
 	while (1)
 	{
-        pthread_mutex_lock(&mutex_);
+        //pthread_mutex_lock(&mutex_);
         v4l2_.read_frame(rgb);
-        pthread_mutex_unlock(&mutex_);
+        //pthread_mutex_unlock(&mutex_);
         cv::waitKey(10) ;
         if (quit)
             pthread_exit(NULL);

@@ -152,6 +152,29 @@ void get_camera_size(int &wid,int &hgt)
     }
 
 }
+
+void get_roi_limit(bool &roi)
+{
+	FILE *read_setup;
+    string config_file = "../src/config.txt";
+	if ((read_setup = fopen(config_file.c_str(), "r")) == NULL) {
+		puts("Fail to open config.txt!");
+		exit(0);
+	}
+	char str[200];
+	int num;
+	while (fgets(str, 100, read_setup) != NULL) {
+       if (_str_cmp(str, (char *)"roi_limit"))
+		{
+			const char * split = " ";
+			char *p = strtok(str, split);
+			p = strtok(NULL, split);
+			sscanf(p, "%d", &num);
+		}
+    }
+	roi = (bool)num;
+}
+
 void get_show_img(bool &show)
 {
 	FILE *read_setup;

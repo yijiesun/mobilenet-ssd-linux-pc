@@ -23,4 +23,5 @@ void get_captrue_data_save_video_mode(int &mode);
 void get_captrue_data_save_img_mode(int &mode);
 void get_move_percent(double & move);
 void get_move_buff_cnt(int & cnt);
+void get_roi_limit(bool &roi);
 #endif

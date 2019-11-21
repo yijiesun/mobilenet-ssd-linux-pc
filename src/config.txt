@@ -3,6 +3,7 @@ camera_height 480
 
 show_img 1
 
+roi_limit 1
 
 captrue_data_save_img_floder /home/syj/work/Tengine/tests/data/img/
 captrue_data_save_video_floder /home/syj/work/Tengine/tests/data/video/
@@ -14,14 +15,14 @@ captrue_data_save_video_mode 0
 #captrue_data_save_video_mode 0-> not save video; 1->save video until ctrl+c; N->save video Ns while motion
 
 
-mssd_img_in /home/syj/work/Tengine/tests/images/5man.png
+mssd_img_in /home/syj/work/Tengine/tests/images/5man.png1
 mssd_img_out /home/syj/work/Tengine/tests/result/result_5manve.jpg
 
 mssd_cvCaptrue_dev 0
 mssd_v4l2_dev /dev/video0
 
-mssd_video_in /home/syj/work/Tengine/tests/video/test1.avi
-mssd_video_out /home/syj/work/Tengine/tests/result/result_noknn_test1.avi
+mssd_video_in /home/syj/cap_data/vid/2019-11-19-16-47-40-774.avi
+mssd_video_out /home/syj/cap_data/out/2019-11-19-16-47-40-774.avi
 
 mssd_video_knn_in /home/syj/cap_data/vid/2019-11-19-16-47-40-774.avi
 mssd_video_knn_out /home/syj/cap_data/out/2019-11-19-16-47-40-774.avi
