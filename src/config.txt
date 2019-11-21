@@ -15,7 +15,7 @@ captrue_data_save_video_mode 0
 #captrue_data_save_video_mode 0-> not save video; 1->save video until ctrl+c; N->save video Ns while motion
 
 
-mssd_img_in /home/syj/work/Tengine/tests/images/5man.png1
+mssd_img_in /home/syj/work/Tengine/tests/images/5man.png
 mssd_img_out /home/syj/work/Tengine/tests/result/result_5manve.jpg
 
 mssd_cvCaptrue_dev 0

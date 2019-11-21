@@ -37,7 +37,8 @@
 #define DEF_PROTO "models/MobileNetSSD_deploy.prototxt"
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
-
+using namespace cv;
+using namespace std;
 struct Box
 {
     float x0;
@@ -47,17 +48,11 @@ struct Box
     int class_idx;
     float score;
 };
-
-void get_input_data_ssd(std::string& image_file, float* input_data, int img_h, int img_w)
+  /************MASK-ROI************/
+Mat mask,show_img;
+  /************MASK-ROI************/
+void get_input_data_ssd(Mat& img, float* input_data, int img_h, int img_w)
 {
-    cv::Mat img = cv::imread(image_file);
-
-    if(img.empty())
-    {
-        std::cerr << "Failed to read image file " << image_file << ".\n";
-        return;
-    }
-
     cv::resize(img, img, cv::Size(img_h, img_w));
     img.convertTo(img, CV_32FC3);
     float* img_data = ( float* )img.data;
@@ -77,14 +72,13 @@ void get_input_data_ssd(std::string& image_file, float* input_data, int img_h, i
     }
 }
 
-void post_process_ssd(std::string& image_file, float threshold, float* outdata, int num, std::string& save_name)
+void post_process_ssd(Mat & img, float threshold, float* outdata, int num)
 {
     const char* class_names[] = {"background", "aeroplane", "bicycle",   "bird",   "boat",        "bottle",
                                  "bus",        "car",       "cat",       "chair",  "cow",         "diningtable",
                                  "dog",        "horse",     "motorbike", "person", "pottedplant", "sheep",
                                  "sofa",       "train",     "tvmonitor"};
 
-    cv::Mat img = cv::imread(image_file);
     int raw_h = img.size().height;
     int raw_w = img.size().width;
     std::vector<Box> boxes;
@@ -110,23 +104,19 @@ void post_process_ssd(std::string& image_file, float threshold, float* outdata, 
     for(int i = 0; i < ( int )boxes.size(); i++)
     {
         Box box = boxes[i];
-        cv::rectangle(img, cv::Rect(box.x0, box.y0, (box.x1 - box.x0), (box.y1 - box.y0)), cv::Scalar(255, 255, 0),
+        cv::rectangle(show_img, cv::Rect(box.x0, box.y0, (box.x1 - box.x0), (box.y1 - box.y0)), cv::Scalar(255, 255, 0),
                       line_width);
         std::ostringstream score_str;
         score_str << box.score;
         std::string label = std::string(class_names[box.class_idx]) + ": " + score_str.str();
         int baseLine = 0;
         cv::Size label_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        cv::rectangle(img,
+        cv::rectangle(show_img,
                       cv::Rect(cv::Point(box.x0, box.y0 - label_size.height),
                                cv::Size(label_size.width, label_size.height + baseLine)),
                       cv::Scalar(255, 255, 0), CV_FILLED);
-        cv::putText(img, label, cv::Point(box.x0, box.y0), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+        cv::putText(show_img, label, cv::Point(box.x0, box.y0), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
     }
-    cv::imwrite(save_name, img);
-    std::cout << "======================================\n";
-    std::cout << "[DETECTED IMAGE SAVED]:\t" << save_name << "\n";
-    std::cout << "======================================\n";
 }
 
 int main(int argc, char* argv[])
@@ -216,6 +206,32 @@ int main(int argc, char* argv[])
     // dump_graph(graph);
     get_param_mssd_img(image_file,save_name);
     std::cout<<"input img: "<<image_file<<"\noutput img: "<<save_name<<std::endl;
+
+    /************MASK-ROI************/
+    Mat frame;
+    frame = imread(image_file);
+    resize(frame,frame,Size(640,480));
+    bool is_roi_limit;
+    get_roi_limit(is_roi_limit);
+    std::cout<<"is_roi_limit: "<<is_roi_limit<<std::endl;
+    if(is_roi_limit)
+        mask=imread("mask.jpg");
+    Mat process_frame,show_img;
+    process_frame.create(480,640,CV_8UC3);
+    show_img.create(480,640,CV_8UC3);
+    /************MASK-ROI************/
+    /************MASK-ROI************/
+    if(is_roi_limit)
+    {
+        bitwise_and(frame,mask,process_frame);
+        addWeighted(frame,0.8,mask,0.3,-1,show_img);
+    }
+    else
+    {
+        process_frame = frame;
+        show_img = frame;
+    }
+    /************MASK-ROI************/
     // input
     int img_h = 300;
     int img_w = 300;
@@ -247,7 +263,7 @@ int main(int argc, char* argv[])
         repeat_count = std::strtoul(repeat, NULL, 10);
 
     // warm up
-    get_input_data_ssd(image_file, input_data, img_h, img_w);
+    get_input_data_ssd(process_frame, input_data, img_h, img_w);
     set_tensor_buffer(input_tensor, input_data, img_size * 4);
     ret = run_graph(graph, 1);
     if(ret != 0)
@@ -260,7 +276,7 @@ int main(int argc, char* argv[])
     float total_time = 0.f;
     for(int i = 0; i < repeat_count; i++)
     {
-        get_input_data_ssd(image_file, input_data, img_h, img_w);
+        get_input_data_ssd(process_frame, input_data, img_h, img_w);
 
         gettimeofday(&t0, NULL);
         run_graph(graph, 1);
@@ -282,8 +298,8 @@ int main(int argc, char* argv[])
     int num = out_dim[1];
     float show_threshold = 0.5;
 
-    post_process_ssd(image_file, show_threshold, outdata, num, save_name);
-
+    post_process_ssd(process_frame, show_threshold, outdata, num);
+     cv::imwrite(save_name, show_img);
     release_graph_tensor(out_tensor);
     release_graph_tensor(input_tensor);
 
