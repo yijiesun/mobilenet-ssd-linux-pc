@@ -35,7 +35,7 @@ set( VIDEO_KNN_SRCS src/mssd_video_knn.cpp src/config.cpp src/knn/knn.cpp ../com
 set( VIDEO_SRCS src/mssd_video.cpp src/knn/knn.cpp src/config.cpp ../common/common.cpp)
 set( ROI_SRCS src/manu_roi.cpp src/knn/knn.cpp src/config.cpp ../common/common.cpp)
 set( CAP_VIDEO_SRCS src/captrue_video.cpp src/config.cpp src/v4l2/v4l2.cpp )
-
+set( MERGE_VIDEO_SRCS src/merge2video.cpp src/config.cpp )
 #opencv
 find_package(OpenCV REQUIRED)
 
@@ -56,6 +56,7 @@ add_executable(VIDEO_KNN ${VIDEO_KNN_SRCS})
 add_executable(VIDEO ${VIDEO_SRCS})
 add_executable(ROI ${ROI_SRCS})
 add_executable(CAP_VIDEO ${CAP_VIDEO_SRCS})
+add_executable(MERGE_VIDEO ${MERGE_VIDEO_SRCS})
 if( ANDROID)
    target_link_libraries(MSSD ${TENGINE_LIBS} ${PROTOBUF_LIB} ${OpenCV_LIBS} ${BLAS_LIB})
 else()
@@ -68,6 +69,7 @@ else()
    target_link_libraries(VIDEO_KNN ${TENGINE_LIBS} ${OpenCV_LIBS} ${BLAS_LIB})
    target_link_libraries(VIDEO ${TENGINE_LIBS} ${OpenCV_LIBS} ${BLAS_LIB})
    target_link_libraries(ROI ${TENGINE_LIBS} ${OpenCV_LIBS} ${BLAS_LIB} pthread)
+   target_link_libraries(MERGE_VIDEO ${TENGINE_LIBS} ${OpenCV_LIBS} ${BLAS_LIB})
 endif()
 
 

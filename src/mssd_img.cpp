@@ -39,15 +39,15 @@
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
 using namespace cv;
 using namespace std;
-struct Box
-{
-    float x0;
-    float y0;
-    float x1;
-    float y1;
-    int class_idx;
-    float score;
-};
+// struct Box
+// {
+//     float x0;
+//     float y0;
+//     float x1;
+//     float y1;
+//     int class_idx;
+//     float score;
+// };
   /************MASK-ROI************/
 Mat mask,show_img;
   /************MASK-ROI************/

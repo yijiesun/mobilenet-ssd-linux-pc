@@ -43,15 +43,15 @@
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
 
-struct Box
-{
-    float x0;
-    float y0;
-    float x1;
-    float y1;
-    int class_idx;
-    float score;
-};
+// struct Box
+// {
+//     float x0;
+//     float y0;
+//     float x1;
+//     float y1;
+//     int class_idx;
+//     float score;
+// };
 const char* class_names[] = {"background",
                         "aeroplane", "bicycle", "bird", "boat",
                         "bottle", "bus", "car", "cat", "chair",
@@ -352,8 +352,8 @@ int main(int argc, char *argv[])
         knn_bgs.pos ++;
         knn_bgs.boundRect.clear();
         knn_bgs.knn_core();
-        knn_bgs.postTreatment();
-        knn_bgs.processRects();
+        knn_bgs.postTreatment(knn_bgs.FGMask);
+        knn_bgs.processRects(boxes_all);
         boxes_all.clear();
         for (int i = 0; i< knn_bgs.boundRect.size(); i++)
 		{

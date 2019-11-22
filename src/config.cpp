@@ -259,6 +259,46 @@ void get_move_percent(double & move)
 		
     }
 }
+void get_knn_thresh(double & th)
+{
+	FILE *read_setup;
+    string config_file = "../src/config.txt";
+	if ((read_setup = fopen(config_file.c_str(), "r")) == NULL) {
+		puts("Fail to open config.txt!");
+		exit(0);
+	}
+	char str[200];
+	while (fgets(str, 100, read_setup) != NULL) {
+       if (_str_cmp(str, (char *)"knn_thresh"))
+		{
+			const char * split = " ";
+			char *p = strtok(str, split);
+			p = strtok(NULL, split);
+			sscanf(p, "%lf", &th);
+		}
+		
+    }
+}
+void get_knn_box_exist_cnt(int & cnt)
+{
+		FILE *read_setup;
+    string config_file = "../src/config.txt";
+	if ((read_setup = fopen(config_file.c_str(), "r")) == NULL) {
+		puts("Fail to open config.txt!");
+		exit(0);
+	}
+	char str[200];
+	while (fgets(str, 100, read_setup) != NULL) {
+       if (_str_cmp(str, (char *)"knn_box_exist_cnt"))
+		{
+			const char * split = " ";
+			char *p = strtok(str, split);
+			p = strtok(NULL, split);
+			sscanf(p, "%d", &cnt);
+		}
+		
+    }
+}
 void get_move_buff_cnt(int & cnt)
 {
 		FILE *read_setup;

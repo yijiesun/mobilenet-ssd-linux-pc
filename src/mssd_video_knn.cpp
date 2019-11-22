@@ -45,15 +45,15 @@ using namespace cv;
 using namespace std;
 
 
-struct Box
-{
-    float x0;
-    float y0;
-    float x1;
-    float y1;
-    int class_idx;
-    float score;
-};
+// struct Box
+// {
+//     float x0;
+//     float y0;
+//     float x1;
+//     float y1;
+//     int class_idx;
+//     float score;
+// };
 const char* class_names[] = {"background",
                         "aeroplane", "bicycle", "bird", "boat",
                         "bottle", "bus", "car", "cat", "chair",
@@ -148,7 +148,7 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
     // std::cout<<"[DETECTED IMAGE SAVED]:\t"<< save_name<<"\n";
     // std::cout<<"======================================\n";
 }
-void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,VideoCapture & v_capture,VideoWriter &outputVideo,const char *inVideoName,const char *outVideoName)
+void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,VideoCapture & v_capture,VideoWriter &outputVideo,const char *inVideoName,const char *outVideoName,int cnt)
 {
 		v_capture.open(inVideoName);
 		v_capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
@@ -156,12 +156,13 @@ void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,VideoCapture & v_capture,Vide
 		knn_bgs.IMG_HGT = v_capture.get(CV_CAP_PROP_FRAME_HEIGHT);
         knn_bgs.set(knn_conf);
         knn_bgs.pos = 0;
+        //v_capture.read(knn_bgs.bk);
+        knn_bgs.knn_box_exist_cnt = cnt;
         knn_bgs.useTopRect = knn_conf[8];
 		knn_bgs.knn_over_percent = 0.001f;
 		knn_bgs.tooSmalltoDrop = knn_conf[9];
 		knn_bgs.dilateRatio =  knn_bgs.IMG_WID  / 320 * 5;
-        knn_bgs.init(/*v_capture*/);
-
+        knn_bgs.init();
         Size sWH = Size( knn_bgs.IMG_WID, knn_bgs.IMG_HGT);
 		bool ret = outputVideo.open(outVideoName, cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
 }
@@ -200,6 +201,8 @@ void draw_img(Mat &img)
 
 int main(int argc, char *argv[])
 {
+    Mat background,background_mask,frame_mask;
+    background = imread("bk.jpg");
     const std::string root_path = get_root_path();
     std::string proto_file;
     std::string model_file;
@@ -207,7 +210,7 @@ int main(int argc, char *argv[])
     std::string save_name="save.jpg";
     KNN_BGS knn_bgs;
     float show_threshold=0.5;
-    int knn_conf[10] = { 0, 2, 1, 5, 0, 2, 4, 1, 5, 10};
+    int knn_conf[10] = { 1, 5, 1, 5, 0, 2, 4, 1, 10, 0};
 
     int res;
     while( ( res=getopt(argc,argv,"p:m:i:h"))!= -1)
@@ -276,8 +279,6 @@ int main(int argc, char *argv[])
     float *input_data = (float *)malloc(sizeof(float) * img_size);
     cv::VideoCapture capture;
     VideoWriter outputVideo;
-    std::string in_video_file =  root_path + DEF_VIDEO_IN;
-    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
 
     /************MASK-ROI************/
     bool is_roi_limit;
@@ -290,10 +291,23 @@ int main(int argc, char *argv[])
     show_img.create(480,640,CV_8UC3);
     /************MASK-ROI************/
 
+    std::string in_video_file =  root_path + DEF_VIDEO_IN;
+    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
     get_param_mssd_video_knn(in_video_file,out_video_file);
     std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
-    init_video_knn(knn_bgs,knn_conf,capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());
-    cv::Mat frame;
+
+    int knn_box_exist_cnt;
+    get_knn_box_exist_cnt(knn_box_exist_cnt);
+    std::cout<<"knn_box_exist_cnt: "<<knn_box_exist_cnt<<std::endl;
+
+    double knn_thresh;
+    get_knn_thresh(knn_thresh);
+    std::cout<<"knn_thresh: "<<knn_thresh<<std::endl;
+
+    knn_bgs.bk = background.clone();
+    init_video_knn(knn_bgs,knn_conf,capture, outputVideo,in_video_file.c_str(),out_video_file.c_str(),knn_box_exist_cnt);
+    knn_bgs.knn_thresh = knn_thresh;
+    cv::Mat frame,diff_mat;
     int node_idx=0;
     int tensor_idx=0;
     tensor_t input_tensor = get_graph_input_tensor(graph, node_idx, tensor_idx);
@@ -315,7 +329,9 @@ int main(int argc, char *argv[])
 
     float *outdata;
     int out_dim[4];
+
     while(1){
+        
         struct timeval t0, t1;
         float total_time = 0.f;
 		if (!capture.read(frame))
@@ -323,10 +339,11 @@ int main(int argc, char *argv[])
 			cout<<"cannot open video or end of video"<<endl;
             break;
 		}
-
         /************MASK-ROI************/
         if(is_roi_limit)
         {
+            bitwise_and(background,mask,background_mask);
+            bitwise_and(frame,mask,frame_mask);
             bitwise_and(frame,mask,process_frame);
             addWeighted(frame,0.8,mask,0.3,-1,show_img);
         }
@@ -336,12 +353,13 @@ int main(int argc, char *argv[])
             show_img = frame.clone();
         }
         /************MASK-ROI************/
+        knn_bgs.diff2(frame_mask,background_mask,knn_bgs.DiffMask);
         knn_bgs.frame = process_frame.clone();
         knn_bgs.pos ++;
         knn_bgs.boundRect.clear();
         knn_bgs.knn_core();
-        knn_bgs.postTreatment();
-        knn_bgs.processRects();
+        knn_bgs.postTreatment(knn_bgs.FGMask);
+        knn_bgs.processRects(boxes_all);
         boxes_all.clear();
 
         for (int i = 0; i< knn_bgs.boundRect.size(); i++)
@@ -429,9 +447,22 @@ int main(int argc, char *argv[])
 
         std::cout << "--------------------------------------\n";
         std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
+
+        Mat out,hot_map_color,hot_map;
+        hot_map.create(knn_bgs.hot_map.rows,knn_bgs.hot_map.cols,CV_8UC1);
+        normalize(knn_bgs.hot_map, hot_map, 255, 2, NORM_MINMAX);
+
+        cv::cvtColor(hot_map, hot_map_color, CV_GRAY2BGR);
+
+        
+        //out.create(show_img.rows+hot_map_color.rows,max(show_img.cols,hot_map_color.cols),CV_8UC3);
+        //cv::cvtColor(knn_bgs.hot_map, hot_map_color, CV_GRAY2BGR);
+
+        
+        hconcat(show_img,hot_map_color,out);
+        cv::imshow("MSSD", out);
         outputVideo.write(show_img);
 
-        cv::imshow("MSSD", show_img);
         if( cv::waitKey(10) == 'q' )
             break;
     }

@@ -44,15 +44,15 @@ using namespace cv;
 using namespace std;
 
 
-struct Box
-{
-    float x0;
-    float y0;
-    float x1;
-    float y1;
-    int class_idx;
-    float score;
-};
+// struct Box
+// {
+//     float x0;
+//     float y0;
+//     float x1;
+//     float y1;
+//     int class_idx;
+//     float score;
+// };
 const char* class_names[] = {"background",
                         "aeroplane", "bicycle", "bird", "boat",
                         "bottle", "bus", "car", "cat", "chair",
@@ -250,8 +250,6 @@ int main(int argc, char *argv[])
     float *input_data = (float *)malloc(sizeof(float) * img_size);
     cv::VideoCapture capture;
     VideoWriter outputVideo;
-    std::string in_video_file =  root_path + DEF_VIDEO_IN;
-    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
 
     /************MASK-ROI************/
     bool is_roi_limit;
@@ -264,6 +262,8 @@ int main(int argc, char *argv[])
     show_img.create(480,640,CV_8UC3);
     /************MASK-ROI************/
 
+    std::string in_video_file =  root_path + DEF_VIDEO_IN;
+    std::string out_video_file =  root_path + DEF_VIDEO_OUT;
     get_param_mssd_video(in_video_file,out_video_file);
     std::cout<<"input video: "<<in_video_file<<"\noutput video: "<<out_video_file<<std::endl;
     init_video(capture, outputVideo,in_video_file.c_str(),out_video_file.c_str());

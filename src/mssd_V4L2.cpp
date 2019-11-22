@@ -42,15 +42,15 @@
 #define DEF_MODEL "models/MobileNetSSD_deploy.caffemodel"
 #define DEF_IMAGE "tests/images/ssd_dog.jpg"
 
-struct Box
-{
-    float x0;
-    float y0;
-    float x1;
-    float y1;
-    int class_idx;
-    float score;
-};
+// struct Box
+// {
+//     float x0;
+//     float y0;
+//     float x1;
+//     float y1;
+//     int class_idx;
+//     float score;
+// };
 
 V4L2 v4l2_;
   /************MASK-ROI************/
@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
         //pthread_mutex_lock(&mutex_);
          frame = rgb.clone();
         //pthread_mutex_unlock(&mutex_);
-        
+
         /************MASK-ROI************/
         if(is_roi_limit)
         {

@@ -143,6 +143,7 @@ int main()
              cvtColor(mask_solid, mask_solid_color, COLOR_GRAY2RGB);
              addWeighted(mask_line_add_origin_solid,0.8,mask_solid_color,0.3,-1,mask_line_add_origin_solid);
              imwrite("mask_img.jpg",mask_line_add_origin_solid);
+             imwrite("bk.jpg",origin);
         }
         else if(draw_mask_flag == 4)
         {
