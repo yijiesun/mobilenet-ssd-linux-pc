@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
+#include "opencv2/opencv.hpp"  
+
 struct Box
 {
     float x0;
@@ -18,7 +20,11 @@ struct Box
     int class_idx;
     float score;
 };
-
+struct BoxInROI
+{
+    struct Box boxs;
+    cv::Rect rects;
+};
 void getTimesSecf(char *param);
 void getTimesSec(char *param);
 bool _str_cmp(char* a, char *b);

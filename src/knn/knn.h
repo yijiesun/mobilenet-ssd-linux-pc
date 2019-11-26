@@ -25,7 +25,6 @@ public:
 	double knn_thresh;
 	float knn_over_percent;
 	int dilateRatio;
-	int solid_frame;
 	int history_num;
 	int useTopRect;
 	int knnv;
@@ -44,9 +43,13 @@ public:
 	void init();
 	void knn_core();
 	void saveROI();
+	Mat last_frame;
+	Mat senser_roi_down100,senser_roi_down100_not;
+	Mat bk_cnt,bk_cnt_cnt; //used to record bg cnt
 	Mat bk;
-	Mat hot_map,hot_map_noraml;
-	cv::Mat frame, fgray, FGMask, showImg,DiffMask;
+	Mat hot_map,hot_map_noraml,hot_map_thresh;
+	Mat bit_and_hotmap_with_diff;
+	cv::Mat frame, fgray, FGMask, showImg,DiffMask,FGMask_origin,senser_roi;
 	void postTreatment(Mat &mat);
 	void processRects(vector<Box> &box);
 	void addBoxToRecs();
@@ -59,7 +62,9 @@ public:
 	void set(int *conf);
 	void paddingRecs(vector<Rect> &rects, int size);
 	void insideDilate(Mat & bimg, Mat & bout, int win_size, int scale);
-	void diff2(Mat &cur,Mat &las,Mat&out);
+	void diff2(Mat &cur,Mat &las);
+	void add_diff_in_box_to_mask(vector<Box> &box);
+	void update_bg();
 private:  
 	PixelHistory* framePixelHistory;// ��¼һ֡ͼ����ÿ�����ص����ʷ��Ϣ
 	

@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     VideoWriter outputVideo;
     std::string in_video_file1;
     std::string out_video_file;
-    get_param_mssd_video(in_video_file1,out_video_file);
+    get_param_mssd_video(out_video_file,in_video_file1);
     std::cout<<"input video: "<<in_video_file1<<"\noutput video: "<<out_video_file<<std::endl;
 
     std::string in_video_file2;
@@ -41,12 +41,12 @@ int main(int argc, char *argv[])
     {
         if (!capture1.read(frame1))
 		{
-			cout<<"cannot open video or end of video"<<endl;
+			cout<<in_video_file1<<"  cannot open video or end of video"<<endl;
             break;
 		}
         if (!capture2.read(frame2))
 		{
-			cout<<"cannot open video or end of video"<<endl;
+			cout<<in_video_file1<<"  cannot open video or end of video"<<endl;
             break;
 		}
         hconcat(frame1,frame2,out);

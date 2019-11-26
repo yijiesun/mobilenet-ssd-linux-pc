@@ -24,6 +24,7 @@
 using namespace std;
 using namespace cv;
 
+int IMG_WID,IMG_HGT;
 int mode;// 0-camera 1-img 2-video
 int key;
 int draw_mask_flag; //0-null 1-new draw line 2-drawing 3-save 4-show result
@@ -64,21 +65,26 @@ int main()
              mode = 2;
         }
         else
-             resize(origin,origin,Size(640,480));
+             resize(origin,origin,Size(IMG_WID,IMG_HGT));
         
         
         
     }
 	if(mode == 0)
     {
-        capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
-        capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480);
+        capture.set(CV_CAP_PROP_FRAME_WIDTH, IMG_WID);
+        capture.set(CV_CAP_PROP_FRAME_HEIGHT, IMG_HGT);
+        IMG_WID = capture.get(CV_CAP_PROP_FRAME_WIDTH);
+        IMG_HGT = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
         capture >> origin;
     }
     else if(mode ==2)
     {
         capture.open(video_in.c_str());
 		capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
+        IMG_WID = capture.get(CV_CAP_PROP_FRAME_WIDTH);
+        IMG_HGT = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
+        cout<<"IMG_WID "<<IMG_WID<<"  IMG_HGT "<<IMG_HGT<<endl;
     }
 
     pb.x=-1;
@@ -93,16 +99,16 @@ int main()
 
 	//img = imread("/home/syj/cap_data/img/2019-11-15-11-39-55-465.jpg");
     
-    mask_line_gray.create(480,640,CV_8UC1);
-    mask_solid.create(480,640,CV_8UC1);
-    mask_line_color.create(480,640,CV_8UC3);
-    mask_line_add_origin_hole.create(480,640,CV_8UC3);
-    mask_line_add_origin_solid.create(480,640,CV_8UC3);
-    mask_solid =Mat::ones(480,640,CV_8UC1)*255;
-    mask_line_gray =Mat::zeros(480,640,CV_8UC1);
-    mask_line_color =Mat::zeros(480,640,CV_8UC3);
-    //memset(mask_solid.data,255,640*480*sizeof(uchar));
-    //memset(mask_line_color.data,0,3*640*480*sizeof(uchar));
+    mask_line_gray.create(IMG_HGT,IMG_WID,CV_8UC1);
+    mask_solid.create(IMG_HGT,IMG_WID,CV_8UC1);
+    mask_line_color.create(IMG_HGT,IMG_WID,CV_8UC3);
+    mask_line_add_origin_hole.create(IMG_HGT,IMG_WID,CV_8UC3);
+    mask_line_add_origin_solid.create(IMG_HGT,IMG_WID,CV_8UC3);
+    mask_solid =Mat::ones(IMG_HGT,IMG_WID,CV_8UC1)*255;
+    mask_line_gray =Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
+    mask_line_color =Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
+    //memset(mask_solid.data,255,IMG_WID*IMG_HGT*sizeof(uchar));
+    //memset(mask_line_color.data,0,3*IMG_WID*IMG_HGT*sizeof(uchar));
 	namedWindow("image");
 	setMouseCallback("image", draw);
 
@@ -110,17 +116,18 @@ int main()
 	int rc = pthread_create(&keyboard, NULL, keyboard_thread, NULL);
 
         Mat tmp_color,tmp_gray;
-        tmp_gray.create(480,640,CV_8UC1);
-        tmp_color.create(480,640,CV_8UC3);
-
+        tmp_gray.create(IMG_HGT,IMG_WID,CV_8UC1);
+        tmp_color.create(IMG_HGT,IMG_WID,CV_8UC3);
+    bool first = true;
+    bool cap =true;
     while(1)
     {
-        if(mode == 0 || mode==2)
+        if(cap && (mode == 0 || mode==2))
         {
             capture >> origin;
             if(origin.empty())
                 break;
-            resize(origin,origin,Size(640,480));
+            //resize(origin,origin,Size(IMG_WID,IMG_HGT));
         }
         
         cvtColor(mask_line_color, tmp_gray, COLOR_RGB2GRAY);
@@ -144,6 +151,7 @@ int main()
              addWeighted(mask_line_add_origin_solid,0.8,mask_solid_color,0.3,-1,mask_line_add_origin_solid);
              imwrite("mask_img.jpg",mask_line_add_origin_solid);
              imwrite("bk.jpg",origin);
+             cap = true;
         }
         else if(draw_mask_flag == 4)
         {
@@ -153,6 +161,12 @@ int main()
         }
         imshow("image", mask_line_add_origin_solid);
         waitKey(30);
+        if(first)
+        {
+            first = false;
+            cap = false;
+        }
+        
         if (quit)
          break;
     }
@@ -173,13 +187,13 @@ void *keyboard_thread(void *threadarg)
         //s-115  d-100 c-99
         if(key == 100)
         {   key = 0;
-            mask_line_color =Mat::zeros(480,640,CV_8UC3);
-            mask_solid =Mat::ones(480,640,CV_8UC1)*255;
-            mask_line_gray =Mat::zeros(480,640,CV_8UC1);
+            mask_line_color =Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
+            mask_solid =Mat::ones(IMG_HGT,IMG_WID,CV_8UC1)*255;
+            mask_line_gray =Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
 
-            //memset(mask_line_color.data,0,3*640*480*sizeof(uchar));
-            //memset(mask_solid.data,255,640*480*sizeof(uchar));
-            //memset(mask_line_gray.data,0,640*480*sizeof(uchar));
+            //memset(mask_line_color.data,0,3*IMG_WID*IMG_HGT*sizeof(uchar));
+            //memset(mask_solid.data,255,IMG_WID*IMG_HGT*sizeof(uchar));
+            //memset(mask_line_gray.data,0,IMG_WID*IMG_HGT*sizeof(uchar));
             draw_mask_flag = 1;
             save=false;
             pb.x=-1;
@@ -236,12 +250,12 @@ static void draw(int event, int x, int y, int flags, void *)
             {
                 cout<<"new draw<<endl"<<endl;
                 
-                p1 = Point(CLIP(x,639), CLIP(y,479));
+                p1 = Point(CLIP(x,IMG_WID-1), CLIP(y,IMG_HGT-1));
                 draw_mask_flag = 2;
             }
             else if(draw_mask_flag == 2)
             {
-                p2 = Point(CLIP(x,639), CLIP(y,479));
+                p2 = Point(CLIP(x,IMG_WID-1), CLIP(y,IMG_HGT-1));
                 if(isDrawing==2)
                     p1 = p2;
                  isDrawing = 1;
@@ -258,13 +272,13 @@ static void draw(int event, int x, int y, int flags, void *)
     {
         if(draw_mask_flag == 1)
         {
-            p1 = Point(CLIP(x,639), CLIP(y,479));
+            p1 = Point(CLIP(x,IMG_WID-1), CLIP(y,IMG_HGT-1));
             draw_mask_flag = 2;
         }
             
         if(isDrawing==2)
         {
-            p2 = Point(CLIP(x,639), CLIP(y,479));
+            p2 = Point(CLIP(x,IMG_WID-1), CLIP(y,IMG_HGT-1));
             line(mask_line_color, p1, p2, Scalar(0, 0, 255),3);
             line(mask_line_gray, p1, p2, Scalar(255, 255, 255));
              if(pb.x==-1)
@@ -291,26 +305,26 @@ void generate_and_save_mask(char * filename)
 {
     int white_cnt = 0;
 
-    for(int w=0;w<640;w++)
+    for(int w=0;w<IMG_WID;w++)
     {
-        for(int h=0;h<480;h++)
+        for(int h=0;h<IMG_HGT;h++)
         {
-            if(*(mask_line_gray.data+h*640+w)!=0)
+            if(*(mask_line_gray.data+h*IMG_WID+w)!=0)
                 break;
             else
-                *(mask_solid.data+h*640+w) = 0;
+                *(mask_solid.data+h*IMG_WID+w) = 0;
             
         }
     }
 
-    for(int w=0;w<640;w++)
+    for(int w=0;w<IMG_WID;w++)
     {
-        for(int h=479;h>=0;h--)
+        for(int h=IMG_HGT-1;h>=0;h--)
         {
-            if(*(mask_line_gray.data+h*640+w)!=0)
+            if(*(mask_line_gray.data+h*IMG_WID+w)!=0)
                 break;
             else
-                *(mask_solid.data+h*640+w) = 0;
+                *(mask_solid.data+h*IMG_WID+w) = 0;
             
         }
     }
