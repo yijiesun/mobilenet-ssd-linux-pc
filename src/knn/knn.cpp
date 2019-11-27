@@ -25,6 +25,8 @@ void KNN_BGS::init()
 	senser_roi.create(IMG_HGT, IMG_WID, CV_8UC1);
 	bk_cnt.create(IMG_HGT, IMG_WID, CV_8UC1);
 	bk_cnt_cnt.create(IMG_HGT, IMG_WID, CV_8UC1);
+	bg_fix_mask.create(IMG_HGT, IMG_WID, CV_8UC1);
+	bg_fix_mask=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
 	bk_cnt_cnt=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
 	bk_cnt=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
 	senser_roi=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
@@ -56,6 +58,7 @@ void KNN_BGS::knn_core()
 
 	//normalize(hot_map_thresh, hot_map_thresh, 50, 5, NORM_MINMAX);
 	int gray = 0;
+	bg_fix_mask=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC1);
 	for (int i = 0; i < IMG_HGT; i++)
 	{
 		for (int j = 0; j < IMG_WID; j++)
@@ -99,10 +102,13 @@ void KNN_BGS::knn_core()
 					bk_cnt_cnt.data[i*IMG_WID + j]++;
 					hot_map.data[i*IMG_WID + j] = 100;
 				}
-				bk_cnt.data[i*IMG_WID + j] = 0;
-				bk.data[i*IMG_WID*3 + j*3]= frame.data[i*IMG_WID*3 + j*3];
-				bk.data[i*IMG_WID*3 + j*3+1]= frame.data[i*IMG_WID*3 + j*3+1];
-				bk.data[i*IMG_WID*3 + j*3+2]= frame.data[i*IMG_WID*3 + j*3+2];
+				if(fit>=2)
+				{
+					bk_cnt.data[i*IMG_WID + j] = 0;
+					bk.data[i*IMG_WID*3 + j*3]= frame.data[i*IMG_WID*3 + j*3];
+					bk.data[i*IMG_WID*3 + j*3+1]= frame.data[i*IMG_WID*3 + j*3+1];
+					bk.data[i*IMG_WID*3 + j*3+2]= frame.data[i*IMG_WID*3 + j*3+2];
+				}
 			}
 			if(bk_cnt_cnt.data[i*IMG_WID + j]>=10)
 			{
@@ -185,10 +191,10 @@ void KNN_BGS::add_diff_in_box_to_mask(vector<Box> &box)
 	for (int i = 0; i<box.size(); i++) {
 		box[i].show_cnt =0;
 		knn_use_box.push_back(box[i]);
-		int x0 = box[i].x0;
-		int y0 = box[i].y0;
-		int w0 = box[i].x1-box[i].x0;
-		int h0 = box[i].y1-box[i].y0;
+		int x0 = box[i].x0-2*padSize;
+		int y0 = box[i].y0-2*padSize;
+		int w0 = box[i].x1-box[i].x0+4*padSize;
+		int h0 = box[i].y1-box[i].y0+4*padSize;
 		CLIP(x0,0,IMG_WID-1);
 		CLIP(y0,0,IMG_HGT-1);
 		CLIP(w0,1,IMG_WID-x0 -1);
@@ -202,13 +208,13 @@ void KNN_BGS::add_diff_in_box_to_mask(vector<Box> &box)
 		CLIP(w0_,1,IMG_WID-x0_ -1);
 		CLIP(h0_,1,IMG_HGT-y0_-1);
 		//make hot map
-		Mat	tmp= hot_map(cv::Rect(x0_,y0_,w0_,h0_));
+		Mat	tmp= hot_map(cv::Rect(x0,y0,w0,h0));
 		tmp.convertTo(tmp, tmp.type(), 1, 255);	
-		tmp= senser_roi(cv::Rect(x0_,y0_,w0_,h0_));
+		tmp= senser_roi(cv::Rect(x0,y0,w0,h0));
 		tmp.convertTo(tmp, tmp.type(), 1, 255);	
-		tmp= bk_cnt(cv::Rect(x0_,y0_,w0_,h0_));
+		tmp= bk_cnt(cv::Rect(x0,y0,w0,h0));
 		tmp.convertTo(tmp, tmp.type(), 1, -255);	
-		tmp= bk_cnt_cnt(cv::Rect(x0_,y0_,w0_,h0_));
+		tmp= bk_cnt_cnt(cv::Rect(x0,y0,w0,h0));
 		tmp.convertTo(tmp, tmp.type(), 1, -255);	
 	}
 	hot_map_noraml = hot_map -100;
@@ -216,7 +222,6 @@ void KNN_BGS::add_diff_in_box_to_mask(vector<Box> &box)
 	hot_map_noraml-=254;
 	hot_map_noraml*=255;
 	//normalize(hot_map_noraml, hot_map_noraml, 255, 0, NORM_MINMAX);
-
      
 	bitwise_and(DiffMask,hot_map_noraml,bit_and_hotmap_with_diff);
 	bitwise_or(FGMask_origin,bit_and_hotmap_with_diff,FGMask_origin);
@@ -261,7 +266,77 @@ void KNN_BGS::processRects(vector<Box> &box)
 	
 	paddingRecs(boundRect, padSize);
 	mergeRecs(boundRect, knn_over_percent);
-	drawRecs(showImg, boundRect, Scalar(0, 255, 0, 0));
+#if 1
+		vector<Rect>::iterator it;
+		int th = 5;
+	for(it=boundRect.begin();it!=boundRect.end();it++)
+	{
+		//up
+		while(1)
+		{
+			int x0,y0,w0,h0;
+			x0 = it->x;
+			y0 = it->y-1;
+			w0 = it->width;
+			h0 = it->height;
+			if(y0<=0) break;
+			Mat tmp=DiffMask(Rect(x0,y0,w0,1))/255;
+			int zero_cnt = countNonZero(tmp);
+			//cout<<"uzero_cnt "<<zero_cnt<<" w0/3 "<<w0/3<<endl;
+			if(zero_cnt==0) break;
+			it->y -=1;
+
+		}
+		//down
+		while(1)
+		{
+			int x0,y0,w0,h0;
+			x0 = it->x;
+			y0 = it->y;
+			w0 = it->width;
+			h0 = it->height+1;
+			if(y0+h0>=IMG_HGT-2) break;
+			Mat tmp=DiffMask(Rect(x0,y0+h0,w0,1))/255;
+			int zero_cnt = countNonZero(tmp);
+			//cout<<"dzero_cnt "<<zero_cnt<<" w0/3 "<<w0/3<<endl;
+			if(zero_cnt==0) break;
+			it->height +=1;
+		}
+		//left
+		while(1)
+		{
+			int x0,y0,w0,h0;
+			x0 = it->x-1;
+			y0 = it->y;
+			w0 = it->width;
+			h0 = it->height;
+			if(x0<=0) break;
+			Mat tmp=DiffMask(Rect(x0,y0,1,h0))/255;
+			int zero_cnt = countNonZero(tmp);
+			//cout<<"lzero_cnt "<<zero_cnt<<" w0/3 "<<w0/3<<endl;
+			if(zero_cnt==0) break;
+			it->x -=1;
+		}
+		//right
+		while(1)
+		{
+			int x0,y0,w0,h0;
+			x0 = it->x;
+			y0 = it->y;
+			w0 = it->width+1;
+			h0 = it->height;
+			if(x0+w0>=IMG_WID-2) break;
+			Mat tmp=DiffMask(Rect(x0+w0,y0,1,h0))/255;
+			int zero_cnt = countNonZero(tmp);
+			//cout<<"rzero_cnt "<<zero_cnt<<" w0/3 "<<w0/3<<endl;
+			if(zero_cnt==0) break;
+			it->width +=1;
+		}
+		
+	}
+#endif
+
+	//drawRecs(showImg, boundRect, Scalar(0, 255, 0, 0));
 
 
 	boundRectTmp.shrink_to_fit();
@@ -477,6 +552,9 @@ void KNN_BGS::diff2(Mat &cur,Mat &las)
 	cv::cvtColor(las,las_gray, CV_BGR2GRAY);
 	absdiff(cur_gray,las_gray,DiffMask);
 	threshold( DiffMask, DiffMask, 30, 255 , 0 );
-	//medianBlur(out,out,3);    
+	medianBlur(DiffMask,DiffMask,3);    
+	Mat element = getStructuringElement(MORPH_RECT, Size(dilateRatio, dilateRatio));
+		//erode(mat, mat, element);
+	dilate(DiffMask, DiffMask, element);
 	//normalize(out, out, 255, 0, NORM_MINMAX);
 }

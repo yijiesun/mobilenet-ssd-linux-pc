@@ -299,6 +299,7 @@ int main(int argc, char *argv[])
     int img_h = 300;
     int img_w = 300;
     int x0,y0,w0,h0;
+    int x0_,y0_,w0_,h0_;
     int img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
 
@@ -329,13 +330,13 @@ int main(int argc, char *argv[])
     VideoWriter outputVideo;
     capture.open(in_video_file.c_str());
     capture.set(CV_CAP_PROP_FOURCC, cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'));
-    capture.set(CV_CAP_PROP_POS_FRAMES, 10);
+    //capture.set(CV_CAP_PROP_POS_FRAMES, 10);
 
     IMG_WID = capture.get(CV_CAP_PROP_FRAME_WIDTH);
     IMG_HGT = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
     background=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
-    Size sWH = Size( IMG_WID*2, IMG_HGT*2);
-     //Size sWH = Size( IMG_WID, IMG_HGT);
+    //Size sWH = Size( IMG_WID*2, IMG_HGT*2);
+     Size sWH = Size( IMG_WID, IMG_HGT);
     bool ret = outputVideo.open( out_video_file.c_str(), cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
 
     
@@ -347,7 +348,7 @@ int main(int argc, char *argv[])
     Mat process_frame,show_img;
     process_frame.create(IMG_HGT,IMG_WID,CV_8UC3);
     show_img.create(IMG_HGT,IMG_WID,CV_8UC3);
-
+    show_img = Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
     int node_idx=0;
     int tensor_idx=0;
     tensor_t input_tensor = get_graph_input_tensor(graph, node_idx, tensor_idx);
@@ -370,6 +371,7 @@ int main(int argc, char *argv[])
     float *outdata;
     int out_dim[4];
     bool first =true;
+    int aa =0;
     while(1){
         
         struct timeval t0, t1;
@@ -382,9 +384,19 @@ int main(int argc, char *argv[])
 		}
         if(first)
         {
+            aa++;
+            if(aa >= 10)
+            {
                 background = frame.clone();
                 knn_bgs.bk = frame.clone();
                 first = false;
+            }
+            else
+            {
+                outputVideo.write(show_img);
+                continue;
+            }
+               
         }
         /************MASK-ROI************/
         if(is_roi_limit)
@@ -419,17 +431,27 @@ int main(int argc, char *argv[])
 				y0 = knn_bgs.boundRect[i].y;
 				w0 = knn_bgs.boundRect[i].width; 
 				h0 = knn_bgs.boundRect[i].height; 
-                CLIP(x0,0,knn_bgs.IMG_WID-1);
-                CLIP(y0,0,knn_bgs.IMG_HGT-1);
-                CLIP(w0,1,knn_bgs.IMG_WID-1);
-                CLIP(h0,1,knn_bgs.IMG_HGT-1);
+                x0_ =x0-2*knn_bgs.padSize;
+                y0_ =y0-2*knn_bgs.padSize;
+                w0_ =w0+4*knn_bgs.padSize;
+                h0_ =h0+4*knn_bgs.padSize;
+
+                CLIP(x0_,0,(knn_bgs.IMG_WID-1));
+                CLIP(y0_,0,(knn_bgs.IMG_HGT-1));
+                CLIP(w0_,1,(knn_bgs.IMG_WID-1-x0_));
+                CLIP(h0_,1,(knn_bgs.IMG_HGT-1-y0_));
+                CLIP(x0,0,(knn_bgs.IMG_WID-1));
+                CLIP(y0,0,(knn_bgs.IMG_HGT-1));
+                CLIP(w0,1,(knn_bgs.IMG_WID-1-x0));
+                CLIP(h0,1,(knn_bgs.IMG_HGT-1-y0));
+
                 if (w0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize || h0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize)
                     continue;
                 Mat	img_roi = knn_bgs.frame(cv::Rect(x0, y0, w0, h0));
                 Mat	img_show= show_img(cv::Rect(x0, y0, w0, h0));
                 Mat img_roi_big;
                 img_show.convertTo(img_show, img_show.type(), 1, 50);
-                Mat	tmp_hotmap= knn_bgs.hot_map(cv::Rect(x0,y0,w0,h0));
+                
 		        
                 if (img_roi.cols <= 100)
 				{
@@ -473,7 +495,16 @@ int main(int argc, char *argv[])
                 
                 post_process_ssd(img_roi_big, show_threshold, outdata, num);
                 if(boxes.empty())
+                {
+                    Mat	tmp_hotmap= knn_bgs.hot_map(cv::Rect(x0,y0,w0,h0));
                     tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, -10);
+                }
+                else
+                {
+                    Mat	tmp_hotmap= knn_bgs.hot_map(cv::Rect(x0_,y0_,w0_,h0_));
+                    tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, 10);
+                }
+                   
                 togetherAllBox(zoom_value,x0,y0,boxes,boxes_all);
                 togetherAllBox(zoom_value,x0,y0,boxes_ruff,boxes_ruff_all);
          }
@@ -519,8 +550,8 @@ int main(int argc, char *argv[])
         vconcat(out,hot_map_color2,out);
  
         cv::imshow("MSSD", out);
-  
-        outputVideo.write(out);
+        //outputVideo.write(out);
+        outputVideo.write(show_img);
  
 
         if( cv::waitKey(10) == 'q' )

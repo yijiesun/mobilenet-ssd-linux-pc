@@ -43,6 +43,7 @@ public:
 	void init();
 	void knn_core();
 	void saveROI();
+	Mat bg_fix_mask;
 	Mat last_frame;
 	Mat senser_roi_down100,senser_roi_down100_not;
 	Mat bk_cnt,bk_cnt_cnt; //used to record bg cnt
