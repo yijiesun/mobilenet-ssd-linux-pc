@@ -8,13 +8,10 @@
 using namespace cv;  
 using namespace std;  
 
-#define FIND_ROI 1
-//const float defaultDist2Threshold = 10.0f;// �ҶȾ�����ֵ 20
-
 struct PixelHistory
 {
-	unsigned char *gray;// ��ʷ�Ҷ�ֵ
-	unsigned char *IsBG;// ��Ӧ�Ҷ�ֵ��ǰ��/�����жϣ�1�����ж�Ϊ������0�����ж�Ϊǰ��
+	unsigned char *gray;
+	unsigned char *IsBG;
 };
 
 class KNN_BGS  
@@ -50,13 +47,15 @@ public:
 	Mat bk;
 	Mat hot_map,hot_map_noraml,hot_map_thresh;
 	Mat bit_and_hotmap_with_diff;
-	cv::Mat frame, fgray, FGMask, showImg,DiffMask,FGMask_origin,senser_roi;
+	Mat human_roi;//记录友好大小的行人出没热点区域
+	cv::Mat frame, fgray, FGMask, showImg,DiffMask,FGMask_origin;
 	void postTreatment(Mat &mat);
 	void processRects(vector<Box> &box);
 	void addBoxToRecs();
 	void getTopRects(vector<Rect> &rects0, vector<Rect> &rects);
 	//bool sortFun(const cv::Rect &p1, const cv::Rect &p2);
-	int buildAndClearSmallContors(vector<vector<Point>> &contours, vector<Rect> &rects, int size);
+	int buildRecsFromContors(vector<vector<Point>> &contours, vector<Rect> &rects);
+	void clearSmallRecs();
 	void mergeRecs(vector<Rect> &rects, float percent);
 	void drawRecs(Mat & img, vector<Rect> &rects, const Scalar& color);
 	float DecideOverlap(const Rect &r1, const Rect &r2, Rect &r3);
@@ -67,7 +66,7 @@ public:
 	void add_diff_in_box_to_mask(vector<Box> &box);
 	void update_bg();
 private:  
-	PixelHistory* framePixelHistory;// ��¼һ֡ͼ����ÿ�����ص����ʷ��Ϣ
+	PixelHistory* framePixelHistory;
 	
 	int frameCnt;
 	

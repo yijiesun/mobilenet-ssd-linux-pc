@@ -43,20 +43,11 @@
 #define DEF_VIDEO_OUT "tests/result_test0.avi"
 
 #define CLIP(a,b,c) (  (a) = (a)>(c)?(c):((a)<(b)?(b):(a))  )
-
+#define THREAD_NUM 10
 using namespace cv;
 using namespace std;
 
 
-// struct Box
-// {
-//     float x0;
-//     float y0;
-//     float x1;
-//     float y1;
-//     int class_idx;
-//     float score;
-// };
 const char* class_names[] = {"background",
                         "aeroplane", "bicycle", "bird", "boat",
                         "bottle", "bus", "car", "cat", "chair",
@@ -64,14 +55,26 @@ const char* class_names[] = {"background",
                         "motorbike", "person", "pottedplant",
                         "sheep", "sofa", "train", "tvmonitor"};
 vector<BoxInROI>	boxes_in_roi; 
-vector<Box>	boxes_ruff_all; 
 vector<Box>	boxes_ruff; 
 vector<Box>	boxes; 
 vector<Box>	boxes_all; 
+pthread_mutex_t mutex_show_img;
+int num_t[THREAD_NUM];
+int img_h;
+int img_w;
+int img_size;
 int IMG_WID,IMG_HGT;
+int repeat_count;
+graph_t graph[THREAD_NUM+1];
+float show_threshold;
+tensor_t input_tensor[THREAD_NUM+1];
+KNN_BGS knn_bgs;
+Mat show_img;
   /************MASK-ROI************/
 Mat mask;
   /************MASK-ROI************/
+
+void *knn_ssd_thread_fun(void *threadarg);
 // void get_input_data_ssd(std::string& image_file, float* input_data, int img_h,  int img_w)
 void get_input_data_ssd(cv::Mat img, float* input_data, int img_h,  int img_w)
 {
@@ -111,8 +114,6 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
     int raw_h = img.size().height;
     int raw_w = img.size().width;
     boxes.clear();
-    boxes_ruff.clear();
-    int line_width=raw_w*0.002;
     printf("detect ruesult num: %d \n",num);
     for (int i=0;i<num;i++)
     {
@@ -130,17 +131,6 @@ void post_process_ssd(cv::Mat img, float threshold,float* outdata,int num)
                 boxes.push_back(box);
                 printf("%s\t:%.0f%%\n", class_names[box.class_idx], box.score * 100);
                 printf("BOX:( %g , %g ),( %g , %g )\n",box.x0,box.y0,box.x1,box.y1);
-            }
-            if(outdata[1]>=threshold/2)
-            {
-                Box box;
-                box.class_idx=outdata[0];
-                box.score=outdata[1];
-                box.x0=outdata[2]*raw_w;
-                box.y0=outdata[3]*raw_h;
-                box.x1=outdata[4]*raw_w;
-                box.y1=outdata[5]*raw_h;
-                boxes_ruff.push_back(box);
             }
             outdata+=6;
         }
@@ -177,9 +167,9 @@ void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,int cnt)
         knn_bgs.pos = 0;
         //v_capture.read(knn_bgs.bk);
         knn_bgs.knn_box_exist_cnt = cnt;
-        knn_bgs.useTopRect = knn_conf[8];
+        knn_bgs.useTopRect = knn_conf[3];
 		knn_bgs.knn_over_percent = 0.001f;
-		knn_bgs.tooSmalltoDrop = knn_conf[9];
+		knn_bgs.tooSmalltoDrop = knn_conf[4];
 		knn_bgs.dilateRatio =  knn_bgs.IMG_WID  / 320 * 5;
         knn_bgs.init();
 
@@ -187,7 +177,7 @@ void init_video_knn(KNN_BGS &knn_bgs,int *knn_conf,int cnt)
 void togetherAllBox(double zoom_value,int x0,int y0,vector<Box> &b0,vector<Box> &b_all )
 {
 	for (int i = 0; i<b0.size(); i++) {
-		float		bx0 = b0[i].x0, by0 = b0[i].y0, bx1= b0[i].x1, by1 = b0[i].y1;
+		float bx0 = b0[i].x0, by0 = b0[i].y0, bx1= b0[i].x1, by1 = b0[i].y1;
 			b0[i].x0= bx0 / zoom_value + x0;
 			b0[i].y0 = by0 / zoom_value + y0;
 			b0[i].x1 = bx1 / zoom_value + x0;
@@ -221,6 +211,22 @@ void draw_img(Mat &img)
 
 }
 
+inline int set_cpu(int i)  
+{  
+    cpu_set_t mask;  
+    CPU_ZERO(&mask);  
+  
+    CPU_SET(i,&mask);  
+  
+    printf("thread %u, i = %d\n", pthread_self(), i);  
+    if(-1 == pthread_setaffinity_np(pthread_self() ,sizeof(mask),&mask))  
+    {  
+        fprintf(stderr, "pthread_setaffinity_np erro\n");  
+        return -1;  
+    }  
+    return 0;  
+}
+
 int main(int argc, char *argv[])
 {
     Mat background,background_mask,frame_mask;
@@ -230,11 +236,11 @@ int main(int argc, char *argv[])
     std::string model_file;
     std::string image_file;
     std::string save_name="save.jpg";
-    KNN_BGS knn_bgs;
-    float show_threshold=0.5;
-    //solid_frame    history_num   knnv  padSize   minContorSize  ( ? )  insideDilate_win_size   insideDilate_scale  useTopRect  tooSmalltoDrop
+    
+    show_threshold=0.5;
+    // history_num   knnv  padSize   useTopRect  tooSmalltoDrop
     // 0, 2, 1, 5, 0, 2, 4, 1, 10, 0
-    int knn_conf[10] = { 0, 2, 1, 5, 0, 2, 4, 1, 5, 0};
+    int knn_conf[5] = { 2, 1, 5, 5, 10};
 
     int res;
     while( ( res=getopt(argc,argv,"p:m:i:h"))!= -1)
@@ -288,7 +294,8 @@ int main(int argc, char *argv[])
     std::cout << "load model done!\n";
 
     // create graph
-    graph_t graph = create_runtime_graph("graph", model_name, NULL);
+    for(int i=0;i<THREAD_NUM+1;i++)
+        graph[i] = create_runtime_graph("graph", model_name, NULL);
     if (!check_graph_valid(graph))
     {
         std::cout << "create graph0 failed\n";
@@ -296,11 +303,9 @@ int main(int argc, char *argv[])
     }
 
     // input
-    int img_h = 300;
-    int img_w = 300;
-    int x0,y0,w0,h0;
-    int x0_,y0_,w0_,h0_;
-    int img_size = img_h * img_w * 3;
+    img_h = 300;
+    img_w = 300;
+    img_size = img_h * img_w * 3;
     float *input_data = (float *)malloc(sizeof(float) * img_size);
 
     /************MASK-ROI************/
@@ -335,8 +340,8 @@ int main(int argc, char *argv[])
     IMG_WID = capture.get(CV_CAP_PROP_FRAME_WIDTH);
     IMG_HGT = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
     background=Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
-    //Size sWH = Size( IMG_WID*2, IMG_HGT*2);
-     Size sWH = Size( IMG_WID, IMG_HGT);
+    Size sWH = Size( IMG_WID*2, IMG_HGT*2);
+    //Size sWH = Size( IMG_WID, IMG_HGT);
     bool ret = outputVideo.open( out_video_file.c_str(), cv::VideoWriter::fourcc ('M', 'P', '4', '2'), 25, sWH);
 
     
@@ -345,24 +350,27 @@ int main(int argc, char *argv[])
    
     diff_mat.create(IMG_HGT,IMG_WID,CV_8UC1);
 
-    Mat process_frame,show_img;
+    Mat process_frame;
     process_frame.create(IMG_HGT,IMG_WID,CV_8UC3);
     show_img.create(IMG_HGT,IMG_WID,CV_8UC3);
     show_img = Mat::zeros(IMG_HGT,IMG_WID,CV_8UC3);
     int node_idx=0;
     int tensor_idx=0;
-    tensor_t input_tensor = get_graph_input_tensor(graph, node_idx, tensor_idx);
+    for(int i=0;i<THREAD_NUM+1;i++)
+        input_tensor[i] = get_graph_input_tensor(graph[i], node_idx, tensor_idx);
     if(!check_tensor_valid(input_tensor))
     {
         printf("Get input node failed : node_idx: %d, tensor_idx: %d\n",node_idx,tensor_idx);
         return 1;
     }
+    for(int i=0;i<THREAD_NUM+1;i++)
+    {
+        int dims[] = {1, 3, img_h, img_w};
+        set_tensor_shape(input_tensor[i], dims, 4);
+        prerun_graph(graph[i]);
+    }
 
-    int dims[] = {1, 3, img_h, img_w};
-    set_tensor_shape(input_tensor, dims, 4);
-    prerun_graph(graph);
-
-    int repeat_count = 1;
+    repeat_count = 1;
     const char *repeat = std::getenv("REPEAT_COUNT");
 
     if (repeat)
@@ -371,11 +379,13 @@ int main(int argc, char *argv[])
     float *outdata;
     int out_dim[4];
     bool first =true;
-    int aa =0;
+    int first_cnt =0;
+	pthread_t knn_ssd_thread_kits[10];
+
     while(1){
-        
         struct timeval t0, t1;
-        float total_time = 0.f;
+        gettimeofday(&t0, NULL);
+		float total_time = 0.f;
 
       if (!capture.read(frame))
 		{
@@ -384,8 +394,8 @@ int main(int argc, char *argv[])
 		}
         if(first)
         {
-            aa++;
-            if(aa >= 10)
+			first_cnt++;
+            if(first_cnt >= 10)
             {
                 background = frame.clone();
                 knn_bgs.bk = frame.clone();
@@ -420,147 +430,70 @@ int main(int argc, char *argv[])
         knn_bgs.knn_core();
         knn_bgs.processRects(boxes_all);
        
-        boxes_ruff_all.clear();
         boxes_in_roi.clear();
         boxes_all.clear();
         boxes.clear();
-        for (int i = 0; i< knn_bgs.boundRect.size(); i++)
+
+        for (int i = 0; i< knn_bgs.boundRect.size()&& i<THREAD_NUM; i++)
 		{
-                double zoom_value;
-            	x0 = knn_bgs.boundRect[i].x;
-				y0 = knn_bgs.boundRect[i].y;
-				w0 = knn_bgs.boundRect[i].width; 
-				h0 = knn_bgs.boundRect[i].height; 
-                x0_ =x0-2*knn_bgs.padSize;
-                y0_ =y0-2*knn_bgs.padSize;
-                w0_ =w0+4*knn_bgs.padSize;
-                h0_ =h0+4*knn_bgs.padSize;
-
-                CLIP(x0_,0,(knn_bgs.IMG_WID-1));
-                CLIP(y0_,0,(knn_bgs.IMG_HGT-1));
-                CLIP(w0_,1,(knn_bgs.IMG_WID-1-x0_));
-                CLIP(h0_,1,(knn_bgs.IMG_HGT-1-y0_));
-                CLIP(x0,0,(knn_bgs.IMG_WID-1));
-                CLIP(y0,0,(knn_bgs.IMG_HGT-1));
-                CLIP(w0,1,(knn_bgs.IMG_WID-1-x0));
-                CLIP(h0,1,(knn_bgs.IMG_HGT-1-y0));
-
-                if (w0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize || h0 <= knn_bgs.tooSmalltoDrop + 2 * knn_bgs.padSize)
-                    continue;
-                Mat	img_roi = knn_bgs.frame(cv::Rect(x0, y0, w0, h0));
-                Mat	img_show= show_img(cv::Rect(x0, y0, w0, h0));
-                Mat img_roi_big;
-                img_show.convertTo(img_show, img_show.type(), 1, 50);
-                
-		        
-                if (img_roi.cols <= 100)
-				{
-					zoom_value = 200.0 / (double)(img_roi.cols);
-					int wid = cvRound(zoom_value * img_roi.cols);
-					int hgt = cvRound(zoom_value * img_roi.rows);
-					resize(img_roi, img_roi_big, Size(wid, hgt));
-				}
-				else if (img_roi.cols <= 200)
-				{
-					img_roi_big = img_roi;
-                    zoom_value = 1;
-				}
-				else
-				{
-					zoom_value = 200.0 / (double)(img_roi.cols);
-					int wid = cvRound(zoom_value * img_roi.cols);
-					int hgt = cvRound(zoom_value * img_roi.rows);
-					resize(img_roi, img_roi_big, Size(wid, hgt));
-				}
-
-                for (int i = 0; i < repeat_count; i++)
-                {
-                    get_input_data_ssd(img_roi_big, input_data, img_h,  img_w);
-
-                    gettimeofday(&t0, NULL);
-                    set_tensor_buffer(input_tensor, input_data, img_size * 4);
-                    run_graph(graph, 1);
-
-                    gettimeofday(&t1, NULL);
-                    float mytime = (float)((t1.tv_sec * 1000000 + t1.tv_usec) - (t0.tv_sec * 1000000 + t0.tv_usec)) / 1000;
-                    total_time += mytime;
-
-                }
-
-                tensor_t out_tensor = get_graph_output_tensor(graph, 0,0);//"detection_out");
-                get_tensor_shape( out_tensor, out_dim, 4);
-                outdata = (float *)get_tensor_buffer(out_tensor);
-
-                int num=out_dim[1];
-                
-                post_process_ssd(img_roi_big, show_threshold, outdata, num);
-                if(boxes.empty())
-                {
-                    Mat	tmp_hotmap= knn_bgs.hot_map(cv::Rect(x0,y0,w0,h0));
-                    tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, -10);
-                }
-                else
-                {
-                    Mat	tmp_hotmap= knn_bgs.hot_map(cv::Rect(x0_,y0_,w0_,h0_));
-                    tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, 10);
-                }
-                   
-                togetherAllBox(zoom_value,x0,y0,boxes,boxes_all);
-                togetherAllBox(zoom_value,x0,y0,boxes_ruff,boxes_ruff_all);
+            num_t[i] = i;
+			int *attr = &num_t[i];
+			int rc = pthread_create(&knn_ssd_thread_kits[i], NULL, knn_ssd_thread_fun, (void *)attr);
          }
-        
+        cout<<"1111111111"<<endl;
         for (int i = 0; i < repeat_count; i++)
         {
             get_input_data_ssd(process_frame, input_data, img_h,  img_w);
-
-            gettimeofday(&t0, NULL);
-            set_tensor_buffer(input_tensor, input_data, img_size * 4);
-            run_graph(graph, 1);
-
-            gettimeofday(&t1, NULL);
-            float mytime = (float)((t1.tv_sec * 1000000 + t1.tv_usec) - (t0.tv_sec * 1000000 + t0.tv_usec)) / 1000;
-            total_time += mytime;
-
+            set_tensor_buffer(input_tensor[THREAD_NUM], input_data, img_size * 4);
+            run_graph(graph[THREAD_NUM], 1);
         }
 
-        tensor_t out_tensor = get_graph_output_tensor(graph, 0,0);//"detection_out");
+        tensor_t out_tensor = get_graph_output_tensor(graph[THREAD_NUM], 0,0);//"detection_out");
         get_tensor_shape( out_tensor, out_dim, 4);
         outdata = (float *)get_tensor_buffer(out_tensor);
-
         int num=out_dim[1];
-        
         post_process_ssd(process_frame, show_threshold, outdata, num);
-      
         togetherAllBox(1,0,0,boxes,boxes_all);
-        togetherAllBox(1,0,0,boxes_ruff,boxes_ruff_all);
    
+		for (int i = 0; i < knn_bgs.boundRect.size() && i < THREAD_NUM; i++)
+		{
+			pthread_join(knn_ssd_thread_kits[i], NULL);
+		}
+
+		gettimeofday(&t1, NULL);
+		float mytime = (float)((t1.tv_sec * 1000000 + t1.tv_usec) - (t0.tv_sec * 1000000 + t0.tv_usec)) / 1000;
+		total_time += mytime;
+
         draw_img(show_img);
 
         std::cout << "--------------------------------------\n";
         std::cout << "repeat " << repeat_count << " times, avg time per run is " << total_time / repeat_count << " ms\n";
 
-        Mat out,hot_map_color,hot_map_color2,hot_map_thresh_color,hot_map;
+       Mat out,hot_map_color,hot_map_color2,hot_map_thresh_color,hot_map;
         hot_map = knn_bgs.hot_map;
 
-        //cv::cvtColor(knn_bgs.bit_and_hotmap_with_diff, hot_map_color, CV_GRAY2BGR);
-        cv::cvtColor(knn_bgs.FGMask_origin, hot_map_color2, CV_GRAY2BGR);  
+        cv::cvtColor(knn_bgs.FGMask, hot_map_color2, CV_GRAY2BGR);  
         cv::cvtColor(knn_bgs.hot_map, hot_map_thresh_color, CV_GRAY2BGR);  
         hconcat(show_img,knn_bgs.bk,out);
         hconcat(hot_map_color2,hot_map_thresh_color,hot_map_color2);
         vconcat(out,hot_map_color2,out);
  
         cv::imshow("MSSD", out);
-        //outputVideo.write(out);
-        outputVideo.write(show_img);
+        outputVideo.write(out);
+        //outputVideo.write(show_img);
  
 
         if( cv::waitKey(10) == 'q' )
             break;
     }
 
-    postrun_graph(graph);
+    for(int i=0;i<THREAD_NUM+1;i++)
+    {
+        postrun_graph(graph[i]);
+        destroy_runtime_graph(graph[i]);
+    }
+    
     free(input_data);
-    destroy_runtime_graph(graph);
     remove_model(model_name);
     outputVideo.release();
     capture.release();
@@ -568,3 +501,76 @@ int main(int argc, char *argv[])
 }
 
 
+void *knn_ssd_thread_fun(void *threadarg)
+{
+	int *num;
+	num = (int *)threadarg;
+    cout<<"create parameter is "<<*num<<"   rect size: "<< knn_bgs.boundRect.size()<<endl;
+    if(*num >= knn_bgs.boundRect.size())
+        return (void *)0;
+
+    if(set_cpu(*num+1))  
+    {  
+        return NULL;  
+    } 
+    int out_dim[4];
+    float *outdata;
+
+    int x0, y0, w0, h0,x0_, y0_, w0_, h0_;
+    x0 = knn_bgs.boundRect[*num].x;
+    y0 = knn_bgs.boundRect[*num].y;
+    w0 = knn_bgs.boundRect[*num].width;
+    h0 = knn_bgs.boundRect[*num].height;
+    x0_ = x0 - 2 * knn_bgs.padSize;
+    y0_ = y0 - 2 * knn_bgs.padSize;
+    w0_ = w0 + 4 * knn_bgs.padSize;
+    h0_ = h0 + 4 * knn_bgs.padSize;
+
+    CLIP(x0_, 0, (knn_bgs.IMG_WID - 1));
+    CLIP(y0_, 0, (knn_bgs.IMG_HGT - 1));
+    CLIP(w0_, 1, (knn_bgs.IMG_WID - 1 - x0_));
+    CLIP(h0_, 1, (knn_bgs.IMG_HGT - 1 - y0_));
+    CLIP(x0, 0, (knn_bgs.IMG_WID - 1));
+    CLIP(y0, 0, (knn_bgs.IMG_HGT - 1));
+    CLIP(w0, 1, (knn_bgs.IMG_WID - 1 - x0));
+    CLIP(h0, 1, (knn_bgs.IMG_HGT - 1 - y0));
+
+
+    //pthread_mutex_lock(&mutex_show_img);
+    Mat	img_roi = knn_bgs.frame(cv::Rect(x0, y0, w0, h0));
+    Mat	img_show = show_img(cv::Rect(x0, y0, w0, h0));
+    img_show.convertTo(img_show, img_show.type(), 1, 30);
+    float *input_data = (float *)malloc(sizeof(float) * img_size);
+    //pthread_mutex_unlock(&mutex_show_img);
+
+
+    for (int i = 0; i < repeat_count; i++)
+    {
+        get_input_data_ssd(img_roi, input_data, img_h, img_w);
+
+        set_tensor_buffer(input_tensor[*num], input_data, img_size * 4);
+        run_graph(graph[*num], 1);
+    }
+
+    tensor_t out_tensor = get_graph_output_tensor(graph[*num], 0, 0);
+    get_tensor_shape(out_tensor, out_dim, 4);
+    outdata = (float *)get_tensor_buffer(out_tensor);
+
+    int num_ = out_dim[1];
+    post_process_ssd(img_roi, show_threshold, outdata, num_);
+    if (boxes.empty())
+    {
+        Mat	tmp_hotmap = knn_bgs.hot_map(cv::Rect(x0, y0, w0, h0));
+        tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, -10);
+    }
+    else
+    {
+        Mat	tmp_hotmap = knn_bgs.hot_map(cv::Rect(x0_, y0_, w0_, h0_));
+        tmp_hotmap.convertTo(tmp_hotmap, tmp_hotmap.type(), 1, 10);
+    }
+    togetherAllBox(1, x0, y0, boxes, boxes_all);
+
+    cout<<"thread end"<<endl;
+    free(input_data);
+	return (void *)0;
+}
