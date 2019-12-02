@@ -43,4 +43,5 @@ void get_knn_thresh(double & th);
 void get_move_buff_cnt(int & cnt);
 void get_roi_limit(bool &roi);
 void get_knn_box_exist_cnt(int & cnt);
+void get_show_knn_box(bool &show);
 #endif

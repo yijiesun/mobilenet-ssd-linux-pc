@@ -1,5 +1,5 @@
 #include "knn.h"
-#include <Eigen/Dense>
+
 #include<algorithm>
 using namespace cv;
 using namespace std;
@@ -46,6 +46,7 @@ void KNN_BGS::init()
 
 void KNN_BGS::knn_core()
 {
+	knn_use_box.clear();
 	cv::cvtColor(frame, fgray, CV_BGR2GRAY);
 	FGMask_origin.setTo(Scalar(255));
 	int gray = 0;
@@ -147,13 +148,17 @@ void KNN_BGS::addBoxToRecs()
 		rect_tmp.height = it->y1 - it->y0;
 		CLIP(rect_tmp.x,0,IMG_WID-1);
 		CLIP(rect_tmp.y,0,IMG_HGT-1);
-		CLIP(rect_tmp.width,1,IMG_WID-1);
-		CLIP(rect_tmp.height,1,IMG_HGT-1);
-		boundRect.push_back(rect_tmp);
+		CLIP(rect_tmp.width,1,IMG_WID-1-rect_tmp.x);
+		CLIP(rect_tmp.height,1,IMG_HGT-1-rect_tmp.y);
+		
 		if((it->show_cnt>=knn_box_exist_cnt)||(rect_tmp.width>IMG_WID/2 || rect_tmp.height >IMG_HGT/2))
 			it=knn_use_box.erase(it);
 		else
+		{
+			boundRect.push_back(rect_tmp);
 			it++;
+		}
+			
 	}
 
 }
